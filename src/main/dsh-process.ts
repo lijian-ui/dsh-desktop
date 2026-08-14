@@ -20,7 +20,7 @@
  * 生命周期回调（DshCallbacks）由主进程注入，用于驱动窗口状态。
  */
 
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -378,12 +378,15 @@ function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
 
 /**
  * 解析系统 Node.js 可执行文件绝对路径。
- * 优先级：config.nodePath（用户显式指定）→ 常见安装路径 → 返回 null。
+ * 优先级：config.nodePath（用户显式指定）→ nvm → 常见安装路径 → null。
  *
  * macOS GUI 启动的 Electron 进程 PATH 不完整（不含用户 shell 的 ~/.zshrc 等），
  * 所以这里不能靠「在 PATH 里找 node」，必须探测绝对路径。
  *
- * 覆盖范围：Homebrew（Apple Silicon / Intel）、官方安装包、nvm（~/.nvm）。
+ * 覆盖范围：nvm（~/.nvm）、Homebrew（Apple Silicon / Intel）、官方安装包。
+ * 关键：每个候选都执行版本校验（dsh 要求 ^22.19 || >=24），不满足的旧版
+ * （如系统自带 v18）会被跳过，避免命中了但 dsh 启动即崩（实测踩坑：系统
+ * v18 命中导致 ERR_MODULE_NOT_FOUND）。
  *
  * @param config 当前配置
  * @returns Node 绝对路径；未找到返回 null
@@ -391,52 +394,85 @@ function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
 function resolveSystemNode(config: DshConfig): string | null {
   // 1. 用户显式配置（最可靠，README 会引导填写）
   if (config.nodePath && fs.existsSync(config.nodePath)) {
+    log.info(`使用用户配置的 Node: ${config.nodePath}`);
     return config.nodePath;
   }
 
-  // 2. 常见安装路径探测
-  const candidates = process.platform === 'win32'
-    ? [
-        'C:\\Program Files\\nodejs\\node.exe',
-        'C:\\Program Files (x86)\\nodejs\\node.exe',
-        path.join(process.env.APPDATA ?? '', 'nvm', 'current', 'node.exe'),
-      ]
-    : [
-        // macOS：Homebrew（Apple Silicon / Intel 两种前缀）与官方安装包
-        '/opt/homebrew/bin/node',
-        '/usr/local/bin/node',
-        '/usr/bin/node',
-      ];
+  // 候选收集：nvm 版本（优先，用户主动安装管理的通常更新）→ 常见安装路径
+  const candidates: string[] = [];
 
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      log.info(`探测到系统 Node: ${p}`);
-      return p;
-    }
-  }
-
-  // 3. macOS/Linux：nvm 路径扫描（~/.nvm/versions/node/vX.Y.Z/bin/node）
-  //    nvm 用户（如报告该 bug 的 M4 Mac 用户）最常见。取语义化版本最大的已安装版本。
+  // 1.5 macOS/Linux：nvm 路径（~/.nvm/versions/node/vX.Y.Z/bin/node）
+  //    注意必须先于常见路径探测——很多 nvm 用户系统里也有旧版 node（如 v18），
+  //    若先命中常见路径会拿到旧版，dsh 启动即崩。nvm 是用户显式管理的版本，优先。
   if (process.platform !== 'win32') {
     const nvmDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
     if (fs.existsSync(nvmDir)) {
       const versions = fs
         .readdirSync(nvmDir)
         .filter((v) => v.startsWith('v'))
-        // 按 semver 降序（自然排序对 vX.Y.Z 形式够用）
-        .sort()
+        .sort() // 字符串排序对 vX.Y.Z 足够：v24 > v18 > v16
         .reverse();
       for (const v of versions) {
         const p = path.join(nvmDir, v, 'bin', 'node');
-        if (fs.existsSync(p)) {
-          log.info(`探测到 nvm Node: ${p}`);
-          return p;
-        }
+        if (fs.existsSync(p)) candidates.push(p);
       }
     }
   }
 
+  // 2. 常见安装路径（作为 nvm 之后的回退）
+  candidates.push(
+    ...(process.platform === 'win32'
+      ? [
+          'C:\\Program Files\\nodejs\\node.exe',
+          'C:\\Program Files (x86)\\nodejs\\node.exe',
+          path.join(process.env.APPDATA ?? '', 'nvm', 'current', 'node.exe'),
+        ]
+      : [
+          // macOS：Homebrew（Apple Silicon / Intel 两种前缀）与官方安装包
+          '/opt/homebrew/bin/node',
+          '/usr/local/bin/node',
+          '/usr/bin/node',
+        ]),
+  );
+
+  // 3. 逐个校验：存在 + 版本满足 dsh 要求
+  for (const p of candidates) {
+    if (!fs.existsSync(p)) continue;
+    if (!satisfiesDshNodeVersion(p)) {
+      log.warn(`探测到 Node 但版本不满足 dsh 要求，跳过: ${p}`);
+      continue;
+    }
+    log.info(`探测到系统 Node: ${p}`);
+    return p;
+  }
+
   return null;
+}
+
+/**
+ * 校验 Node 版本是否满足 dsh 的 `^22.19.0 || >=24.0.0` 要求。
+ * 通过执行 `<node> --version` 解析主/次版本号判断。
+ *
+ * @param nodePath Node 可执行文件绝对路径
+ * @returns 满足要求返回 true；执行失败或版本不符返回 false
+ */
+function satisfiesDshNodeVersion(nodePath: string): boolean {
+  try {
+    const out = execFileSync(nodePath, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const m = out.trim().match(/^v(\d+)\.(\d+)/);
+    if (!m) return false;
+    const major = Number(m[1]);
+    const minor = Number(m[2]);
+    // ^22.19.0：22.x 且 minor>=19；>=24.0.0：24 及以上（23 不在要求内）
+    return (major === 22 && minor >= 19) || major >= 24;
+  } catch {
+    // 执行失败（无权限 / 非可执行文件等）视为不满足
+    return false;
+  }
 }
 
 /**
