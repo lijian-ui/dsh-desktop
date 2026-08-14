@@ -55,19 +55,22 @@ flowchart TB
 > 注意：Electron 内置的 Node 版本不满足 dsh 要求，**但无所谓**——
 > dsh 跑在独立的系统 Node 子进程里，Electron 只负责显示页面。
 
-### 打包版如何找到系统 Node
+### 打包版如何找到 Node 运行时
 
-打包后的 .app / .exe 从 Finder / 桌面双击启动时，进程的 `PATH` **不包含**用户 shell
-（`~/.zshrc` 等）里配置的路径，因此无法靠 `npx`/`node` 命令找到系统 Node。
-桌面端按以下顺序解析系统 Node 绝对路径：
+**v0.2.0 起内置精简 Node 运行时**（`resources/node-runtime/`），打包版**无需用户预装 Node**，
+开箱即用。桌面端按以下顺序解析 Node 可执行文件：
 
-1. **config.json 显式配置 `nodePath`**（最可靠，推荐）——例如 macOS：
+1. **内置 Node 运行时**（打包版自带，优先）——`resources/node-runtime/node.exe`（Win）或 `bin/node`（macOS）
+2. **config.json 显式配置 `nodePath`**（自定义时用）——例如 macOS：
    ```json
    { "nodePath": "/usr/local/bin/node" }
    ```
-   （Apple Silicon + Homebrew 通常是 `/opt/homebrew/bin/node`）
-2. 常见安装路径自动探测：macOS `/opt/homebrew/bin/node` → `/usr/local/bin/node` → `/usr/bin/node`；
-   Windows `C:\Program Files\nodejs\node.exe` 等
+3. 自动探测（nvm → Homebrew → 官方路径），且**每个候选都会做版本校验**
+   （dsh 要求 `^22.19 || >=24`），不满足的旧版（如系统 v18）自动跳过
+
+> 内置 Node 由 `scripts/fetch-node.cjs` 从 `node/` 官方发行包精简生成到 `vendor/`，
+> 打包时经 `electron-builder.yml` 的 `extraResources` 打进安装包。
+> 开发模式（`npm run dev`）无内置目录，走 2/3 步探测。
 
 > 若探测失败且未配置，启动会报错提示。打包版同时要求 dsh 及其全部依赖
 > 被 `asarUnpack` 解包（`electron-builder.yml` 已配置 `**/node_modules/**`），

@@ -61,24 +61,27 @@ flowchart TB
 > fine**, because dsh runs in a separate system Node child process and Electron only displays
 > the page.
 
-### How packaged builds locate system Node
+### How packaged builds locate the Node runtime
 
-When a packaged `.app` / `.exe` is launched by double-clicking, the process `PATH` **does not
-include** the paths configured in the user's shell (`~/.zshrc`, etc.), so `npx`/`node` commands
-cannot be found. The desktop app resolves the system Node absolute path in this order:
+**Since v0.2.0 the app bundles a slim Node runtime** (`resources/node-runtime/`), so packaged
+builds work **without the user installing Node**. The resolution order:
 
-1. **Explicit `nodePath` in `config.json`** (most reliable, recommended) — e.g. on macOS:
+1. **Bundled Node runtime** (packaged builds, preferred) — `resources/node-runtime/node.exe`
+   (Windows) or `bin/node` (macOS)
+2. **Explicit `nodePath` in `config.json`** (for customization) — e.g. on macOS:
    ```json
    { "nodePath": "/usr/local/bin/node" }
    ```
-   (Apple Silicon + Homebrew is usually `/opt/homebrew/bin/node`)
-2. Auto-detect common install locations: macOS `/opt/homebrew/bin/node` →
-   `/usr/local/bin/node` → `/usr/bin/node`; Windows `C:\Program Files\nodejs\node.exe`, etc.
+3. Auto-detect (nvm → Homebrew → official paths), with **version validation for every
+   candidate** (dsh requires `^22.19 || >=24`); outdated versions (e.g. system v18) are skipped
 
-> If detection fails and nothing is configured, startup will report an error. Packaged builds
-> also require dsh and all its dependencies to be unpacked via `asarUnpack`
-> (`electron-builder.yml` sets `**/node_modules/**`), because system Node cannot read files
-> inside the asar archive.
+> The bundled Node is produced by `scripts/fetch-node.cjs` (slimming the official dist in
+> `node/` into `vendor/`) and packaged via `extraResources` in `electron-builder.yml`.
+> Dev mode (`npm run dev`) has no bundled dir and falls back to steps 2/3.
+
+> Packaged builds also require dsh and all its dependencies to be unpacked via `asarUnpack`
+> (`electron-builder.yml` sets `**/node_modules/**`), because the system/bundled Node cannot
+> read files inside the asar archive.
 
 ---
 

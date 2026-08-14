@@ -39,6 +39,16 @@ asarUnpack:
 # 关键：不要为 Electron 重编译原生模块（它们服务于系统 Node 的 dsh 子进程）
 npmRebuild: false
 
+# 内置 Node.js 运行时（v0.2.0）：
+# 把 vendor/node/<os>-<arch>/ 精简后的 Node 拷进安装包 resources/node-runtime/，
+# dsh 子进程优先使用内置 Node，用户无需预装系统 Node。
+# 产物由 scripts/fetch-node.cjs 在打包前生成（node/ 官方发行包 → vendor/ 精简）。
+extraResources:
+  - from: vendor/node/${os}-${arch}
+    to: node-runtime
+    filter:
+      - "**/*"
+
 win:
   target:
     - nsis

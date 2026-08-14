@@ -378,12 +378,13 @@ function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
 
 /**
  * 解析系统 Node.js 可执行文件绝对路径。
- * 优先级：config.nodePath（用户显式指定）→ nvm → 常见安装路径 → null。
+ * 优先级：内置 Node（打包版）→ config.nodePath → nvm → 常见安装路径 → null。
  *
  * macOS GUI 启动的 Electron 进程 PATH 不完整（不含用户 shell 的 ~/.zshrc 等），
  * 所以这里不能靠「在 PATH 里找 node」，必须探测绝对路径。
  *
- * 覆盖范围：nvm（~/.nvm）、Homebrew（Apple Silicon / Intel）、官方安装包。
+ * 覆盖范围：内置运行时（resources/node-runtime）、nvm（~/.nvm）、
+ * Homebrew（Apple Silicon / Intel）、官方安装包。
  * 关键：每个候选都执行版本校验（dsh 要求 ^22.19 || >=24），不满足的旧版
  * （如系统自带 v18）会被跳过，避免命中了但 dsh 启动即崩（实测踩坑：系统
  * v18 命中导致 ERR_MODULE_NOT_FOUND）。
@@ -392,6 +393,19 @@ function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
  * @returns Node 绝对路径；未找到返回 null
  */
 function resolveSystemNode(config: DshConfig): string | null {
+  // 0. ★ 内置 Node 运行时（v0.2.0，最优先）：
+  //    打包版把精简 Node 放在 resources/node-runtime/（见 electron-builder.yml
+  //    extraResources + scripts/fetch-node.cjs），开箱即用，不依赖用户环境。
+  //    开发模式（app.isPackaged === false）没有此目录，自然跳过。
+  const bundledRoot = path.join(process.resourcesPath, 'node-runtime');
+  const bundledNode = process.platform === 'win32'
+    ? path.join(bundledRoot, 'node.exe')
+    : path.join(bundledRoot, 'bin', 'node');
+  if (fs.existsSync(bundledNode)) {
+    log.info(`使用内置 Node 运行时: ${bundledNode}`);
+    return bundledNode;
+  }
+
   // 1. 用户显式配置（最可靠，README 会引导填写）
   if (config.nodePath && fs.existsSync(config.nodePath)) {
     log.info(`使用用户配置的 Node: ${config.nodePath}`);

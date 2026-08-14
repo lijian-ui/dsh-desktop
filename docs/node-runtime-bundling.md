@@ -1,6 +1,7 @@
 # v0.2.0 方案：内置 Node.js 运行时（Bundled Node Runtime）
 
-> 状态：**设计稿**（尚未实施）
+> 状态：**已实施（2026-08-14）**——fetch-node.cjs / electron-builder extraResources /
+> dsh-process 内置优先均已完成并提交，待双端打包验证
 > 目标版本：v0.2.0
 > 关联问题：M4 用户 nvm 环境启动失败、打包版依赖系统 Node 的环境脆弱性
 
