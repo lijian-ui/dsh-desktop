@@ -161,11 +161,14 @@ The desktop app looks up `config.json` in order; **the first found is used, not 
 | Scenario | Path |
 |----------|------|
 | Dev mode (`npm run dev`) | project root: `electron-app/config.json` |
-| **Packaged Windows** | `%APPDATA%\DeepSeek Harness 桌面端\config.json`, i.e. `C:\Users\<user>\AppData\Roaming\DeepSeek Harness 桌面端\config.json` |
-| **Packaged macOS** | `~/Library/Application Support/DeepSeek Harness 桌面端/config.json` |
+| **Packaged Windows** | `%APPDATA%\dsh-desktop\config.json`, i.e. `C:\Users\<user>\AppData\Roaming\dsh-desktop\config.json` |
+| **Packaged macOS** | `~/Library/Application Support/dsh-desktop/config.json` |
 
-> The directory name comes from Electron's `app.getName()` (`productName` when packaged);
-> a missing file is silently ignored, falling back to defaults/environment variables.
+> The directory name comes from Electron's `app.getName()` (the `name` field of
+> `package.json`, i.e. `dsh-desktop`, when packaged; note it is NOT `productName`
+> "DeepSeek Harness 桌面端" — that value only lives in electron-builder.yml and does
+> not reach the packaged app.asar's package.json). A missing file is silently ignored,
+> falling back to defaults/environment variables.
 
 ---
 

@@ -150,10 +150,12 @@ npm run dev
 | 场景 | 路径 |
 |------|------|
 | 开发模式（`npm run dev`） | 项目根：`electron-app/config.json` |
-| **打包版 Windows** | `%APPDATA%\DeepSeek Harness 桌面端\config.json`，即 `C:\Users\<用户名>\AppData\Roaming\DeepSeek Harness 桌面端\config.json` |
-| **打包版 macOS** | `~/Library/Application Support/DeepSeek Harness 桌面端/config.json` |
+| **打包版 Windows** | `%APPDATA%\dsh-desktop\config.json`，即 `C:\Users\<用户名>\AppData\Roaming\dsh-desktop\config.json` |
+| **打包版 macOS** | `~/Library/Application Support/dsh-desktop/config.json` |
 
-> 目录名取 Electron 的 `app.getName()`（打包后为 `productName`），文件不存在时忽略，全部走默认值/环境变量。
+> 目录名取 Electron 的 `app.getName()`（打包后为 `package.json` 的 `name` 字段，即 `dsh-desktop`；
+> 注意不是 `productName`「DeepSeek Harness 桌面端」——该值只配在 electron-builder.yml，
+> 不会进入打包后 app.asar 的 package.json），文件不存在时忽略，全部走默认值/环境变量。
 
 ---
 
