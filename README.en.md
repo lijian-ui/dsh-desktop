@@ -104,6 +104,22 @@ On first launch:
 2. It parses the actual port from the child's stdout (OS-assigned to avoid conflicts);
 3. It creates a window loading `http://127.0.0.1:<port>` — you see the official WebUI.
 
+### Installing unsigned macOS builds
+
+The current release is **not signed/notarized with an Apple Developer ID**, so macOS
+Gatekeeper may block the first install/launch. Common errors and their fixes:
+
+| Error message | Cause | Fix |
+|---------------|-------|-----|
+| "cannot be opened because the developer cannot be verified" / "Apple cannot check it for malicious software" | Gatekeeper blocks the unsigned app | **Right-click the app icon → select "Open" → click "Open" again in the dialog** (first time only; double-click works afterwards) |
+| "is damaged and can't be opened. You should move it to the Trash" | Download carries a quarantine flag | Run `xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness 桌面端.app"` in Terminal |
+| "cannot be opened because it is from an unidentified developer" | Same as above | System Settings → Privacy & Security → click "Open Anyway" |
+
+> Each fix is needed **only once**; the app itself is unaffected — this only bypasses
+> the Gatekeeper check. If prompts persist, check System Settings → Privacy & Security →
+> Security and make sure "Allow applications from" is not locked to
+> "App Store and identified developers" only.
+
 ---
 
 ## Configuration
