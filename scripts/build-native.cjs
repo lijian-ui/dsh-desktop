@@ -30,6 +30,20 @@ const koffiDir = path.join(nodeModulesDir, 'koffi');
 /** 需要补齐的平台（覆盖全部打包目标：Windows x64 + macOS x64/arm64） */
 const WANTED_PLATFORMS = ['darwin-x64', 'darwin-arm64', 'win32-x64'];
 
+/**
+ * 按打包目标解析需要补齐的平台：
+ *   --win → 仅 win32-x64（Windows 打包，不下载 mac 包，避免白等超时）
+ *   --mac → darwin-x64 + darwin-arm64（macOS 双架构）
+ *   无参  → 全部（与 fetch-node 的默认行为对齐）
+ * @returns {string[]} 平台列表
+ */
+function resolveWantedPlatforms() {
+  const args = process.argv.slice(2);
+  if (args.includes('--win')) return ['win32-x64'];
+  if (args.includes('--mac')) return ['darwin-x64', 'darwin-arm64'];
+  return WANTED_PLATFORMS;
+}
+
 /** 平台拆分包命名后缀检测：@scope/pkg-<platform> 或 pkg-<platform> */
 const PLATFORM_SUFFIX_RE = new RegExp(`-(${WANTED_PLATFORMS.join('|')})$`);
 
@@ -132,10 +146,15 @@ function collectPlatformOptionalDeps() {
   return result;
 }
 
-/** 通用补齐：缺失的平台拆分包从 npmmirror 下载解压（best-effort） */
-async function ensurePlatformPackages() {
+/**
+ * 通用补齐：缺失的平台拆分包从 npmmirror 下载解压（best-effort）
+ * @param {string[]} platforms 需要补齐的平台列表（如 ['win32-x64']）
+ */
+async function ensurePlatformPackages(platforms) {
+  const suffixRe = new RegExp(`-(${platforms.join('|')})$`);
   const missing = [];
   for (const [depName, info] of collectPlatformOptionalDeps()) {
+    if (!suffixRe.test(depName)) continue;
     if (fs.existsSync(path.join(info.destDir, 'package.json'))) continue;
     missing.push({ depName, ...info });
   }
@@ -186,7 +205,9 @@ async function main() {
   }
 
   // 通用补齐平台拆分包（双架构打包必需，覆盖 koffi/sharp/libvips 等）
-  await ensurePlatformPackages();
+  const platforms = resolveWantedPlatforms();
+  console.log(`[build-native] 目标平台: ${platforms.join(', ')}`);
+  await ensurePlatformPackages(platforms);
 }
 
 main().catch((err) => {
