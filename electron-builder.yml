@@ -22,6 +22,10 @@ files:
   - package.json
   # 托盘/窗口图标：运行时从 asar 内读取 build/icon.png（黑鲸）
   - build/icon.png
+  # koffi 平台拆分包（@koromix/koffi-<os>-<arch>）：electron-builder 按 dependencies
+  # 收集时可能漏掉 optionalDependencies，而 koffi 运行时按 process.platform-arch 查找
+  # 这些包（Intel 正常、M 芯片 ERR_MODULE_NOT_FOUND 的根因），显式声明保证全部带进包
+  - "node_modules/@koromix/**"
   # 排除源码映射与版本控制目录，减小体积
   - "!**/*.map"
   - "!**/.git/**"
