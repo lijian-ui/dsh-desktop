@@ -79,8 +79,9 @@ Electron 主进程
 ```
 electron-app/
 ├── node/                         # ★ 已有（不入 git）：官方 Node 发行包，见 3.1.1
-│   ├── node-v24.18.1-win-x64.zip       # 37MB（已有）
-│   └── node-v24.18.1-darwin-x64.tar.gz # 53MB（已有）
+│   ├── node-v24.19.0-win-x64/          # Windows x64（解压版）
+│   ├── node-v24.19.0-darwin-x64/       # macOS Intel（解压版）
+│   └── node-v24.19.0-darwin-arm64/     # macOS Apple Silicon（解压版）
 ├── vendor/                        # ★ 新增：精简后的 Node 运行时（不入 git，见 3.4）
 │   └── node/
 │       ├── win-x64/
@@ -93,7 +94,7 @@ electron-app/
 │           └── lib/...
 ├── scripts/
 │   ├── build-native.cjs           # 已有：koffi 物化
-│   ├── fetch-node.cjs             # ★ 新增：下载 + 精简 Node 运行时
+│   ├── fetch-node.cjs             # ★ 新增：精简拷贝 Node 运行时（本地已有发行包，仅在线兜底）
 │   └── ...
 ├── electron-builder.yml           # 改：extraResources 打包 node-runtime
 └── src/main/dsh-process.ts        # 改：resolveSystemNode 优先内置 Node
@@ -101,17 +102,16 @@ electron-app/
 
 #### 3.1.1 现成二进制（重要）
 
-`electron-app/node/` 目录下**已存在**解压好的三份官方 Node 发行包（用户手动下载），
-版本满足 dsh 要求 `>=24`：
+`electron-app/node/` 目录下**已存在**解压好的三份官方 Node **v24.19.0** 发行包
+（版本已统一，实测 `node.exe --version` = v24.19.0），满足 dsh 要求 `>=24`：
 
 | 目录 | 平台 | node 可执行文件 | 版本 |
 |------|------|------------------|------|
-| `node-v24.18.1-win-x64/` | Windows x64 | `node.exe`（89M） | v24.18.1 |
-| `node-v24.18.1-darwin-x64/` | macOS Intel | `bin/node`（118M） | v24.18.1 |
+| `node-v24.19.0-win-x64/` | Windows x64 | `node.exe`（89M） | v24.19.0 |
+| `node-v24.19.0-darwin-x64/` | macOS Intel | `bin/node`（118M） | v24.19.0 |
 | `node-v24.19.0-darwin-arm64/` | macOS Apple Silicon | `bin/node`（116M） | v24.19.0 |
 
-> ⚠️ 版本不一致：x64 为 24.18.1，arm64 为 24.19.0。ABI 均为 NODE_MODULE_VERSION=137，
-> 兼容无碍；若求统一可补 `node-v24.19.0-darwin-x64` 或把 arm64 降回 24.18.1。
+> 三份均为 v24.19.0（已从 24.18.1 统一升级），ABI = NODE_MODULE_VERSION 137。
 > 目录含大量构建用不上的文件（include/share/node_modules 等，~190MB/份），
 > 由 `fetch-node.cjs` 精简后拷入 `vendor/`。这些目录**不入 git**（大二进制）。
 
