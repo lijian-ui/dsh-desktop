@@ -4,6 +4,12 @@ dist/
 # electron-builder 打包输出（安装包与解压目录）
 dist-electron/
 
+# Node 运行时（v0.2.0 内置 Node 集成）：
+# node/   = 官方发行包（大二进制，本机构建用）
+# vendor/ = 精简后的 Node 运行时（fetch-node.cjs 构建时生成）
+node/
+vendor/
+
 # 日志
 *.log
 
@@ -18,3 +24,4 @@ scripts/publish-github.mjs
 .DS_Store
 .idea/
 .vscode/
+.codeartsdoer
