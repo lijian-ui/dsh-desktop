@@ -101,18 +101,19 @@ electron-app/
 
 #### 3.1.1 现成二进制（重要）
 
-`electron-app/node/` 目录下**已存在**两份官方 Node v24.18.1 发行包（日期 2026-07-29，
-与 dsh 要求 `>=24` 匹配）：
+`electron-app/node/` 目录下**已存在**解压好的三份官方 Node 发行包（用户手动下载），
+版本满足 dsh 要求 `>=24`：
 
-| 文件 | 大小 | 用途 |
-|------|------|------|
-| `node-v24.18.1-win-x64.zip` | 37MB | Windows x64 集成源 |
-| `node-v24.18.1-darwin-x64.tar.gz` | 53MB | macOS Intel 集成源 |
-| ~~darwin-arm64~~ | **缺失** | macOS Apple Silicon 需补下载（`node-v24.18.1-darwin-arm64.tar.gz`，npmmirror 或 nodejs.org） |
+| 目录 | 平台 | node 可执行文件 | 版本 |
+|------|------|------------------|------|
+| `node-v24.18.1-win-x64/` | Windows x64 | `node.exe`（89M） | v24.18.1 |
+| `node-v24.18.1-darwin-x64/` | macOS Intel | `bin/node`（118M） | v24.18.1 |
+| `node-v24.19.0-darwin-arm64/` | macOS Apple Silicon | `bin/node`（116M） | v24.19.0 |
 
-`fetch-node.cjs` 应**优先复用本地 `node/` 目录的发行包**（免下载、离线可构建），
-缺失的平台（如 darwin-arm64）再走镜像下载。这两份包本身**不入 git**（大二进制），
-但保留在开发机供构建使用。
+> ⚠️ 版本不一致：x64 为 24.18.1，arm64 为 24.19.0。ABI 均为 NODE_MODULE_VERSION=137，
+> 兼容无碍；若求统一可补 `node-v24.19.0-darwin-x64` 或把 arm64 降回 24.18.1。
+> 目录含大量构建用不上的文件（include/share/node_modules 等，~190MB/份），
+> 由 `fetch-node.cjs` 精简后拷入 `vendor/`。这些目录**不入 git**（大二进制）。
 
 ### 3.2 `scripts/fetch-node.cjs`（新增）
 
