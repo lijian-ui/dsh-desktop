@@ -42,6 +42,11 @@ win:
   # 桌面端图标：多尺寸 ICO（16/24/32/48/64/128/256），由 scripts/generate-icon.cjs 从官方 SVG 编译生成
   icon: build/icon.ico
 
+mac:
+  # macOS 产物名带架构后缀：避免 --x64 --arm64 双架构产物同名，
+  # 否则 x64/arm64 的 dmg/zip 上传 GitHub Release 时互相覆盖
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
 nsis:
   oneClick: false              # 非一键安装，展示安装向导
   perMachine: false            # 当前用户安装（无需管理员）
