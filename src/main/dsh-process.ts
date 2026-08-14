@@ -22,6 +22,7 @@
 
 import { ChildProcess, spawn } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { app } from 'electron';
 import kill from 'tree-kill';
@@ -214,14 +215,24 @@ export class DshManager {
         }
       });
 
-      // 子进程在端口解析前就退出：通常是 Node 版本不满足或依赖缺失
+      // 子进程在端口解析前就退出：通常是 Node 版本不满足或依赖缺失。
+      // 把 stdoutBuffer（含 stderr 输出）末尾几行附到错误信息里，
+      // 让错误对话框直接展示 dsh 的真实报错，方便用户排查。
       child.on('exit', (code, signal) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
+          const tail = this.stdoutBuffer
+            .trim()
+            .split(/\r?\n/)
+            .filter((l) => l.trim())
+            .slice(-10)
+            .join('\n');
           reject(new Error(
-            `dsh 子进程在就绪前退出（code=${code}, signal=${signal}）。` +
-            `请确认系统 Node 版本满足 ^22.19 || >=24，且已安装 @deepseek-ai/dsh。`,
+            `dsh 子进程在就绪前退出（code=${code}, signal=${signal}）。\n` +
+            `请确认系统 Node 版本满足 ^22.19 || >=24，且已安装 @deepseek-ai/dsh。\n` +
+            `如需指定系统 Node 路径，请在 config.json 设置 nodePath。` +
+            (tail ? `\n\ndsh 输出（最近 10 行）：\n${tail}` : ''),
           ));
         }
         // 已就绪情况下的退出由 watchCrash 处理
@@ -372,6 +383,8 @@ function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
  * macOS GUI 启动的 Electron 进程 PATH 不完整（不含用户 shell 的 ~/.zshrc 等），
  * 所以这里不能靠「在 PATH 里找 node」，必须探测绝对路径。
  *
+ * 覆盖范围：Homebrew（Apple Silicon / Intel）、官方安装包、nvm（~/.nvm）。
+ *
  * @param config 当前配置
  * @returns Node 绝对路径；未找到返回 null
  */
@@ -399,6 +412,27 @@ function resolveSystemNode(config: DshConfig): string | null {
     if (fs.existsSync(p)) {
       log.info(`探测到系统 Node: ${p}`);
       return p;
+    }
+  }
+
+  // 3. macOS/Linux：nvm 路径扫描（~/.nvm/versions/node/vX.Y.Z/bin/node）
+  //    nvm 用户（如报告该 bug 的 M4 Mac 用户）最常见。取语义化版本最大的已安装版本。
+  if (process.platform !== 'win32') {
+    const nvmDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
+    if (fs.existsSync(nvmDir)) {
+      const versions = fs
+        .readdirSync(nvmDir)
+        .filter((v) => v.startsWith('v'))
+        // 按 semver 降序（自然排序对 vX.Y.Z 形式够用）
+        .sort()
+        .reverse();
+      for (const v of versions) {
+        const p = path.join(nvmDir, v, 'bin', 'node');
+        if (fs.existsSync(p)) {
+          log.info(`探测到 nvm Node: ${p}`);
+          return p;
+        }
+      }
     }
   }
 
