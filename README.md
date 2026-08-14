@@ -10,24 +10,34 @@ Electron 主进程通过子进程启动官方 `dsh web`，再把其本地 HTTP �
 
 ## 架构概览
 
-```
-┌─────────────────────────────────────────────┐
-│  Electron 主进程（我们的代码，零原生模块）      │
-│   ├─ 启动 dsh 子进程（系统 Node 运行）          │
-│   ├─ 解析 stdout 拿到监听端口                   │
-│   └─ 创建 BrowserWindow 加载 http://127.0.0.1:port
-└───────────────────┬─────────────────────────┘
-                     │ spawn（系统 Node，承担原生模块/Node 版本）
-┌───────────────────▼─────────────────────────┐
-│  官方 dsh 子进程（@deepseek-ai/dsh CLI）       │
-│   dsh web --host 127.0.0.1 --port 0           │
-│   → 起 HTTP 服务 + Agent 核心 + 前端静态资源    │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Main["Electron 主进程（我们的代码，零原生模块）"]
+        Mgr["DshManager<br/>spawn 官方 dsh + 端口解析<br/>崩溃自动重启"]
+        Win["BrowserWindow<br/>加载 http://127.0.0.1:port"]
+        Tray["系统托盘<br/>显示窗口 / 重启 / 退出"]
+        Menu["中文菜单栏<br/>重启 / 关于 / 退出"]
+    end
+
+    subgraph Child["官方 dsh 子进程（系统 Node 运行）"]
+        Cli["@deepseek-ai/dsh CLI<br/>dsh web --host 127.0.0.1 --port 0"]
+        Http["HTTP 服务 + Agent 核心<br/>+ 前端静态资源"]
+    end
+
+    Mgr -- "spawn（系统 Node，承担原生模块 / Node 版本）" --> Cli
+    Cli -- "stdout 解析端口" --> Mgr
+    Cli --> Http
+    Mgr -- "端口就绪" --> Win
+    Win -- "关闭 → 隐藏到托盘" --> Tray
+    Tray -- "显示主窗口" --> Win
+    Menu -- "重启 dsh 服务" --> Mgr
 ```
 
 - **官方主包只暴露 CLI**，没有可 import 的运行时 API，因此采用进程外 `spawn`。
 - **原生模块（node-pty / koffi）与 Node 版本要求**全部由系统 Node 跑的官方子进程承担，
   Electron 侧无需 `electron-rebuild`，无 ABI 负担。
+- **打包版**：dsh 及其全部依赖由 `asarUnpack` 解包到真实文件系统，主进程用
+  「系统 Node 绝对路径 + `dsh/lib/bin.js`」启动子进程（见「打包版如何找到系统 Node」）。
 - 后续若官方发布 embed/SDK，可演进到方案 B（file:// + IPC 桥接），前端代码无需改动。
 
 ---
@@ -244,7 +254,7 @@ npm run release:github
 
 ## 已知限制与后续演进
 
-- **方案 A 不是终态**：官方 webserver 注释已预留 `file:// + IPC` 的桌面形态（方案 B）。
+- **此方案不是终态**：官方 webserver 注释已预留 `file:// + IPC` 的桌面形态。
   待官方发布正式的 embed/SDK 后，可将传输层从 HTTP 替换为 IPC，前端代码无需改动。
 - **端口**：当前通过 loopback HTTP 通信，本机任意进程都能访问该端口。方案 B 可消除此面。
 - **dev-preview 风险**：`@deepseek-ai/dsh` 处于 rc 阶段，版本升级可能带来破坏性变更，
