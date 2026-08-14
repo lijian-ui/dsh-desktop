@@ -10,6 +10,10 @@ dist-electron/
 # 本地配置（可能包含 API Key 等敏感信息，切勿提交）
 config.json
 
+# 发版脚本（本机专用，不上传 GitHub；gh CLI 凭据由本机 keyring 提供）
+scripts/publish-lib.mjs
+scripts/publish-github.mjs
+
 # 操作系统 / 编辑器
 .DS_Store
 .idea/
