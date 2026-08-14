@@ -114,6 +114,19 @@ npm run dev
 - `host`：监听地址，默认 `127.0.0.1`（仅本机，不暴露网络）。
 - `port`：传 `0` 让系统分配空闲端口；也可固定（如 `3080`）。
 - `extraArgs`：需要原样透传给 `dsh web` 的额外命令行参数数组。
+- `nodePath`：系统 Node.js 绝对路径（打包版必须，见下文「打包版如何找到系统 Node」）。
+
+### config.json 的读取位置
+
+桌面端按顺序查找 `config.json`，**找到即用、不合并**：
+
+| 场景 | 路径 |
+|------|------|
+| 开发模式（`npm run dev`） | 项目根：`electron-app/config.json` |
+| **打包版 Windows** | `%APPDATA%\DeepSeek Harness 桌面端\config.json`，即 `C:\Users\<用户名>\AppData\Roaming\DeepSeek Harness 桌面端\config.json` |
+| **打包版 macOS** | `~/Library/Application Support/DeepSeek Harness 桌面端/config.json` |
+
+> 目录名取 Electron 的 `app.getName()`（打包后为 `productName`），文件不存在时忽略，全部走默认值/环境变量。
 
 ---
 
