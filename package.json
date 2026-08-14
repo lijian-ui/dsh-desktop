@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DeepSeek Harness 官方 Web 形态的 Electron 桌面壳（方案 A：spawn 官方 dsh web 子进程）",
   "main": "dist/main/index.js",
   "author": "",
