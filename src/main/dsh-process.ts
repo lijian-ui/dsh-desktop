@@ -23,6 +23,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { app } from 'electron';
 import kill from 'tree-kill';
 import { createLogger } from './log';
 import { DshConfig, buildDshEnv } from './config';
@@ -154,7 +155,7 @@ export class DshManager {
    */
   private spawnOnce(desiredPort: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const { command, args } = resolveDshBin();
+      const { command, args } = resolveDshBin(this.config);
 
       // 组装 dsh web 的完整参数：
       //   dsh web --host 127.0.0.1 --port <desiredPort> [额外参数...]
@@ -310,13 +311,45 @@ export class DshManager {
 /**
  * 解析 dsh 可执行文件路径。
  *
- * 优先使用本项目本地安装的 dsh（node_modules/.bin/dsh），
- * 开发期即为此路径；若本地未安装，则回退到 `npx --no-install` 调用。
+ * 开发期：优先使用本项目本地安装的 dsh（node_modules/.bin/dsh）。
  *
- * @returns 命令与基础参数，例如 { command: '/.../node_modules/.bin/dsh', args: [] }
- *          或 { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] }
+ * 打包后（app.isPackaged）：
+ *   - dsh 及其全部依赖已被 asarUnpack 解包到 app.asar.unpacked/node_modules/，
+ *     系统 Node 可直接读取真实文件。
+ *   - 命令改为「系统 Node + dsh 的 lib/bin.js」：
+ *     * 系统 Node 路径 = config.nodePath（用户显式指定）→ 常见路径探测 → 报错
+ *     * macOS GUI 启动的进程 PATH 不完整，绝不能依赖 npx / 相对 node 命令
+ *
+ * @param config 当前配置（携带 nodePath）
+ * @returns 命令与基础参数，例如：
+ *   开发期 { command: '/.../node_modules/.bin/dsh', args: [] }
+ *   打包后 { command: '/usr/local/bin/node', args: ['/.../app.asar.unpacked/.../dsh/lib/bin.js'] }
  */
-function resolveDshBin(): { command: string; args: string[] } {
+function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
+  // ── 打包后场景：node_modules 已在 app.asar.unpacked，直接用系统 Node 跑 dsh bin ──
+  if (app.isPackaged) {
+    // electron-builder 把 asarUnpack 内容放在 resources/app.asar.unpacked/
+    const unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
+    const dshBinJs = path.join(
+      unpackedDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js',
+    );
+
+    if (fs.existsSync(dshBinJs)) {
+      const nodePath = resolveSystemNode(config);
+      if (nodePath) {
+        log.info(`打包版使用系统 Node 启动 dsh: ${nodePath}`);
+        return { command: nodePath, args: [dshBinJs] };
+      }
+      // Node 路径未解析到：走 npx 兜底（若 PATH 恰好可用），最终由调用方报错
+      log.warn('未找到系统 Node 可执行文件，回退到 npx 调用');
+      return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+    }
+
+    log.warn(`打包后未找到 dsh 可执行文件: ${dshBinJs}，回退到 npx 调用`);
+    return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+  }
+
+  // ── 开发期：本地 node_modules/.bin/dsh ──
   const binDir = path.join(process.cwd(), 'node_modules', '.bin');
   const localBin = process.platform === 'win32'
     ? path.join(binDir, 'dsh.cmd')
@@ -330,6 +363,46 @@ function resolveDshBin(): { command: string; args: string[] } {
   // 兜底：依赖 npx 调用本地已安装的包（--no-install 避免联网下载）
   log.warn('未找到本地 dsh 可执行文件，回退到 npx 调用');
   return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+}
+
+/**
+ * 解析系统 Node.js 可执行文件绝对路径。
+ * 优先级：config.nodePath（用户显式指定）→ 常见安装路径 → 返回 null。
+ *
+ * macOS GUI 启动的 Electron 进程 PATH 不完整（不含用户 shell 的 ~/.zshrc 等），
+ * 所以这里不能靠「在 PATH 里找 node」，必须探测绝对路径。
+ *
+ * @param config 当前配置
+ * @returns Node 绝对路径；未找到返回 null
+ */
+function resolveSystemNode(config: DshConfig): string | null {
+  // 1. 用户显式配置（最可靠，README 会引导填写）
+  if (config.nodePath && fs.existsSync(config.nodePath)) {
+    return config.nodePath;
+  }
+
+  // 2. 常见安装路径探测
+  const candidates = process.platform === 'win32'
+    ? [
+        'C:\\Program Files\\nodejs\\node.exe',
+        'C:\\Program Files (x86)\\nodejs\\node.exe',
+        path.join(process.env.APPDATA ?? '', 'nvm', 'current', 'node.exe'),
+      ]
+    : [
+        // macOS：Homebrew（Apple Silicon / Intel 两种前缀）与官方安装包
+        '/opt/homebrew/bin/node',
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+      ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      log.info(`探测到系统 Node: ${p}`);
+      return p;
+    }
+  }
+
+  return null;
 }
 
 /**

@@ -26,14 +26,15 @@ files:
   - "!**/*.map"
   - "!**/.git/**"
 
-# 启用 asar 压缩（源码受保护），但下方 asarUnpack 会把原生模块解包出来
+# 启用 asar 压缩（源码受保护），但下方 asarUnpack 会把运行所需内容解包出来
 asar: true
+# 整个 node_modules 解包到 app.asar.unpacked/（真实文件系统）。
+# 原因：dsh 子进程由「系统 Node」运行，而系统 Node 无法读取 asar 内的文件——
+# 若 dsh 及其 60+ 依赖留在 asar 里，子进程 require 即失败。
+# 同时原生模块（node-pty / koffi）本就必须解包。代价是 node_modules 不压缩，
+# 换来 dsh 子进程（含原生模块 ABI）可正常运行。
 asarUnpack:
-  - "**/node_modules/node-pty/**"
-  - "**/node_modules/koffi/**"
-  - "**/node_modules/**/*.node"
-  - "**/node_modules/**/*.dll"
-  - "**/node_modules/**/*.exe"
+  - "**/node_modules/**"
 
 # 关键：不要为 Electron 重编译原生模块（它们服务于系统 Node 的 dsh 子进程）
 npmRebuild: false

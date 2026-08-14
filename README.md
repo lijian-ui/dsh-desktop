@@ -43,6 +43,24 @@ Electron 主进程通过子进程启动官方 `dsh web`，再把其本地 HTTP �
 > 注意：Electron 内置的 Node 版本不满足 dsh 要求，**但无所谓**——
 > dsh 跑在独立的系统 Node 子进程里，Electron 只负责显示页面。
 
+### 打包版如何找到系统 Node
+
+打包后的 .app / .exe 从 Finder / 桌面双击启动时，进程的 `PATH` **不包含**用户 shell
+（`~/.zshrc` 等）里配置的路径，因此无法靠 `npx`/`node` 命令找到系统 Node。
+桌面端按以下顺序解析系统 Node 绝对路径：
+
+1. **config.json 显式配置 `nodePath`**（最可靠，推荐）——例如 macOS：
+   ```json
+   { "nodePath": "/usr/local/bin/node" }
+   ```
+   （Apple Silicon + Homebrew 通常是 `/opt/homebrew/bin/node`）
+2. 常见安装路径自动探测：macOS `/opt/homebrew/bin/node` → `/usr/local/bin/node` → `/usr/bin/node`；
+   Windows `C:\Program Files\nodejs\node.exe` 等
+
+> 若探测失败且未配置，启动会报错提示。打包版同时要求 dsh 及其全部依赖
+> 被 `asarUnpack` 解包（`electron-builder.yml` 已配置 `**/node_modules/**`），
+> 因为系统 Node 无法读取 asar 压缩包内的文件。
+
 ---
 
 ## 安装与运行

@@ -26,6 +26,14 @@ export interface DshConfig {
   apiKey?: string;
   /** 需要原样透传给 `dsh web` 的额外命令行参数 */
   extraArgs: string[];
+  /**
+   * 系统 Node.js 可执行文件绝对路径（可选）。
+   * 打包版必须用系统 Node 运行 dsh 子进程（满足其 ^22.19 || >=24 要求），
+   * 而 macOS GUI 启动的进程 PATH 不完整，无法靠 `npx`/`node` 找到，
+   * 因此允许用户显式指定（如 /usr/local/bin/node 或 /opt/homebrew/bin/node）。
+   * 缺省时按常见安装路径探测，找不到则启动报错提示配置此项。
+   */
+  nodePath?: string;
 }
 
 /** 本地配置文件名称（位于项目根或用户数据目录） */
@@ -71,6 +79,7 @@ export function loadConfig(): DshConfig {
     port: fileConfig.port ?? (process.env.DSH_PORT ? Number(process.env.DSH_PORT) : 0),
     apiKey,
     extraArgs: fileConfig.extraArgs ?? [],
+    nodePath: fileConfig.nodePath,
   };
 }
 
