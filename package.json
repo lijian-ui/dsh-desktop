@@ -14,12 +14,13 @@
     "lint": "tsc --noEmit",
     "build:native": "node scripts/build-native.cjs",
     "fetch-node": "node scripts/fetch-node.cjs",
-    "build:electron": "npm run fetch-node && npm run build:native && npm run build && electron-builder",
-    "build:electron:win": "node scripts/fetch-node.cjs --win && npm run build:native && npm run build && electron-builder --win",
-    "build:electron:mac": "node scripts/fetch-node.cjs --mac && npm run build:native && npm run build && electron-builder --mac --x64 --arm64",
+    "build:electron": "npm run verify-deps && npm run fetch-node && npm run build:native && npm run build && electron-builder",
+    "build:electron:win": "node scripts/verify-deps.cjs && node scripts/fetch-node.cjs --win && npm run build:native && npm run build && electron-builder --win",
+    "build:electron:mac": "node scripts/verify-deps.cjs && node scripts/fetch-node.cjs --mac && npm run build:native && npm run build && electron-builder --mac --x64 --arm64",
     "pack": "npm run build:electron -- --dir",
     "dist": "npm run build:electron",
-    "release:github": "node scripts/publish-github.mjs"
+    "release:github": "node scripts/publish-github.mjs",
+    "verify-deps": "node scripts/verify-deps.cjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.6",
