@@ -84,5 +84,12 @@ nsis:
   createDesktopShortcut: always
   shortcutName: DeepSeek Harness 桌面端
 
-# 暂不配置自动更新发布通道
-publish: null
+# GitHub Release 发布通道（自动更新元数据）：
+# 配置后打包会生成 latest.yml（Windows）/ latest-mac.yml（macOS），
+# electron-updater 客户端据此检查/下载更新。发版走 scripts/publish-github.mjs。
+publish:
+  provider: github
+  owner: lijian-ui
+  repo: dsh-desktop
+  # 不设置 private 属性：公开仓库默认无需 token（GitHub 对 public 资产的
+  # 下载不鉴权）；私有仓库才需 GH_TOKEN 环境变量。

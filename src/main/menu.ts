@@ -21,6 +21,8 @@ export interface MenuHandlers {
   onRestartDsh(): void;
   /** 显示「关于」对话框 */
   onShowAbout(): void;
+  /** 手动检查更新（electron-updater） */
+  onCheckForUpdates(): void;
   /**
    * 退出应用：先置 isQuitting 标志再 quit，否则会被窗口 close 拦截
    * 变成「最小化到托盘」，永远退不掉。
@@ -109,6 +111,8 @@ export function createAppMenu(handlers: MenuHandlers): Menu {
       label: '帮助',
       submenu: [
         { label: '关于', click: () => handlers.onShowAbout() },
+        { label: '检查更新', click: () => handlers.onCheckForUpdates() },
+        { type: 'separator' },
         {
           label: '访问 DeepSeek 官网',
           click: () => void shell.openExternal('https://www.deepseek.com'),

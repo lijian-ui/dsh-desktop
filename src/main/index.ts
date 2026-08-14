@@ -22,6 +22,7 @@ import { DshManager } from './dsh-process';
 import { createMainWindow, loadDsh, showFatalError, showMainWindow } from './window';
 import { createAppMenu } from './menu';
 import { createTray, destroyTray } from './tray';
+import { initAutoUpdater, checkForUpdatesManually } from './updater';
 
 const log = createLogger('main');
 
@@ -107,7 +108,13 @@ async function bootstrap(): Promise<void> {
     onRestartDsh: () => void dshManager?.restart(),
     onShowAbout,
     onQuit: quitApp,
+    onCheckForUpdates: () => void checkForUpdatesManually(),
   });
+
+  // 初始化自动更新（GitHub Release 通道）：
+  // 启动 60s 后检查新版本，发现后自动下载，下载完弹窗询问是否重启安装。
+  // 仅打包版启用（开发模式无 update 通道，electron-updater 会自行跳过）。
+  initAutoUpdater(getMainWindow, { autoDownload: true });
 
   // 创建系统托盘：窗口最小化后从这里找回；「退出」走 quitApp（置 isQuitting）。
   // 返回 null 表示托盘不可用（如部分 Linux 桌面），此时不拦截窗口关闭。
