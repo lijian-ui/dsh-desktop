@@ -110,7 +110,10 @@ electron-app/
 ├── .gitignore
 ├── README.md
 ├── scripts/
-│   └── build-native.cjs  # 打包前置：物化 koffi 原生二进制（best-effort）
+│   ├── build-native.cjs    # 打包前置：物化 koffi 原生二进制（best-effort）
+│   ├── generate-icon.cjs   # 图标生成：官方 SVG → build/icon.ico / icon.png（依赖 sharp）
+│   ├── publish-lib.mjs     # 发布公共模块：产物扫描、版本解析、发布说明加载
+│   └── publish-github.mjs  # 发版脚本：gh CLI 创建 GitHub Release 并上传产物
 └── src/
     ├── main/             # 主进程代码（Node）
     │   ├── index.ts          # 入口：生命周期、IPC、菜单串联、错误兜底
@@ -171,9 +174,26 @@ npm run dist
 
 产物输出到 `dist-electron/`（已在 `.gitignore` 忽略）。
 
+### 发布到 GitHub Release
+
+```bash
+# 1. 先打包（产出 dist-electron/ 下的安装包与 latest.yml）
+npm run dist:win
+
+# 2. 发布（创建/更新 GitHub Release 并上传全部产物）
+npm run release:github
+```
+
+- **前置**：安装并登录 `gh` CLI（`winget install --id GitHub.cli && gh auth login`）。
+- **tag**：自动取 `package.json` 的 `version`，生成 `v{version}`（如 `v0.1.0`）。
+- **发布说明**：默认文案；在项目根创建 `RELEASE_NOTES.md` 即可自定义（Markdown 全文作为 Release Notes）。
+- **重复发布同版本**：脚本检测到已存在的 release 时会更新说明并 `--clobber` 覆盖同名附件。
+- **产物范围**：`dist-electron/` 顶层所有 `.exe / .dmg / .AppImage / .deb / .zip / .yml / .blockmap`（排除 `builder-*` 调试文件）。
+
 ### 注意事项
 
-- **自定义图标**：在 `build/icon.ico` 放置文件，并取消 `electron-builder.yml` 中 `win.icon` 注释。
+- **自定义图标**：官方 Harness 黑色鲸鱼图标已由 `scripts/generate-icon.cjs` 自动生成到
+  `build/icon.ico`（多尺寸）与 `build/icon.png`，无需手工维护。
 - **国内镜像**：`.npmrc` 已配置 npmmirror 与 Electron 二进制镜像，Electron 下载不受影响。
 - **首次打包耗时**：`npm install` 会下载 Electron 与官方 dsh 的原生依赖，建议使用国内源。
 - **dev-preview 风险**：`@deepseek-ai/dsh` 处于 rc 阶段，版本升级可能带来破坏性变更，

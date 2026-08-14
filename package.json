@@ -15,7 +15,8 @@
     "build:native": "node scripts/build-native.cjs",
     "pack": "npm run build:native && npm run build && electron-builder --dir",
     "dist": "npm run build:native && npm run build && electron-builder",
-    "dist:win": "npm run build:native && npm run build && electron-builder --win nsis"
+    "dist:win": "npm run build:native && npm run build && electron-builder --win nsis",
+    "release:github": "node scripts/publish-github.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.6",
