@@ -250,7 +250,7 @@ npm run build:electron -- --linux
 ### 发布到 GitHub Release
 
 ```bash
-# 1. 先打包（产出 dist-electron/ 下的安装包与 latest.yml）
+# 1. 先打包（产出 dist-electron/ 下的安装包 + latest.yml / latest-mac.yml 更新元数据）
 npm run build:electron:win
 
 # 2. 发布（创建/更新 GitHub Release 并上传全部产物）
@@ -258,10 +258,20 @@ npm run release:github
 ```
 
 - **前置**：安装并登录 `gh` CLI（`winget install --id GitHub.cli && gh auth login`）。
-- **tag**：自动取 `package.json` 的 `version`，生成 `v{version}`（如 `v0.1.0`）。
+- **tag**：自动取 `package.json` 的 `version`，生成 `v{version}`（如 `v0.2.0`）。
 - **发布说明**：默认文案；在项目根创建 `RELEASE_NOTES.md` 即可自定义（Markdown 全文作为 Release Notes）。
 - **重复发布同版本**：脚本检测到已存在的 release 时会更新说明并 `--clobber` 覆盖同名附件。
 - **产物范围**：`dist-electron/` 顶层所有 `.exe / .dmg / .AppImage / .deb / .zip / .yml / .blockmap`（排除 `builder-*` 调试文件）。
+
+### 自动更新
+
+v0.2.0 起内置 `electron-updater`，走 GitHub Release 通道：
+
+- 打包时（`publish` 已配置 GitHub provider）生成 `latest.yml`（Windows）/ `latest-mac.yml`（macOS）
+- 客户端启动 60 秒后自动检查，发现新版本自动下载，下载完弹窗「立即重启 / 稍后」
+- 帮助菜单「检查更新」可手动触发；每小时定时检查
+- **发布时务必保证 `latest*.yml` + `.zip`（macOS 更新用 zip，不是 dmg）+ `.blockmap` 都上传**，
+  否则对应平台无法增量更新（`release:github` 的产物范围已覆盖）
 
 ### 注意事项
 
