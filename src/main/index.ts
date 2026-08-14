@@ -19,8 +19,9 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import { createLogger } from './log';
 import { loadConfig } from './config';
 import { DshManager } from './dsh-process';
-import { createMainWindow, loadDsh, showFatalError } from './window';
+import { createMainWindow, loadDsh, showFatalError, showMainWindow } from './window';
 import { createAppMenu } from './menu';
+import { createTray, destroyTray } from './tray';
 
 const log = createLogger('main');
 
@@ -28,6 +29,28 @@ const log = createLogger('main');
 let dshManager: DshManager | null = null;
 /** 主窗口引用（用于单实例聚焦、菜单动作、刷新） */
 let mainWindow: BrowserWindow | null = null;
+/**
+ * 是否处于「真正退出」流程。
+ * 点击窗口 X / Cmd+W 时若为 false，窗口只隐藏到系统托盘（见 window.ts close 拦截）；
+ * 只有托盘/菜单「退出」显式置 true 后才真正结束应用。
+ */
+let isQuitting = false;
+/**
+ * 系统托盘是否可用（部分 Linux 桌面环境不支持托盘，创建会失败）。
+ * 托盘不可用时关闭窗口应直接退出，否则窗口关闭后无法找回。
+ */
+let trayAvailable = false;
+
+/** 显式退出入口：置 isQuitting 后走标准退出流程（before-quit 清理 dsh 进程树） */
+function quitApp(): void {
+  isQuitting = true;
+  app.quit();
+}
+
+/** 判断「本次窗口关闭是否应最小化到托盘」：托盘可用 && 未在退出流程 */
+function shouldHideToTray(): boolean {
+  return trayAvailable && !isQuitting;
+}
 
 /**
  * 注册主进程与 preload 之间的 IPC 通道。
@@ -83,7 +106,16 @@ async function bootstrap(): Promise<void> {
     getMainWindow,
     onRestartDsh: () => void dshManager?.restart(),
     onShowAbout,
+    onQuit: quitApp,
   });
+
+  // 创建系统托盘：窗口最小化后从这里找回；「退出」走 quitApp（置 isQuitting）。
+  // 返回 null 表示托盘不可用（如部分 Linux 桌面），此时不拦截窗口关闭。
+  trayAvailable = createTray({
+    onShowWindow: () => showMainWindow(mainWindow),
+    onRestartDsh: () => void dshManager?.restart(),
+    onQuit: quitApp,
+  }) !== null;
 
   const config = loadConfig();
   log.info('正在启动 dsh 子进程管理器...');
@@ -92,7 +124,7 @@ async function bootstrap(): Promise<void> {
     // dsh 就绪（首次或崩溃重启后）：创建窗口或刷新到新端口
     onReady: (port) => {
       if (!mainWindow || mainWindow.isDestroyed()) {
-        mainWindow = createMainWindow(port, config.host);
+        mainWindow = createMainWindow(port, config.host, shouldHideToTray);
       } else {
         loadDsh(mainWindow, port, config.host);
       }
@@ -140,25 +172,23 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   // 第二个实例启动时，聚焦已有窗口而不是再开一个
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    showMainWindow(mainWindow);
   });
 
   // 应用就绪后启动
   app.whenReady().then(bootstrap);
 
-  // macOS 习惯：点 Dock 图标时若无窗口则重建
+  // macOS 习惯：点 Dock 图标时若无窗口则重建；窗口在托盘里则恢复显示
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && dshManager?.isRunning) {
-      mainWindow = createMainWindow(dshManager.currentPort);
+    if (!showMainWindow(mainWindow) && dshManager?.isRunning) {
+      mainWindow = createMainWindow(dshManager.currentPort, undefined, shouldHideToTray);
     }
   });
 
   // 退出前清理 dsh 子进程树（before-quit 可异步等待）
   app.on('before-quit', async (event) => {
     event.preventDefault(); // 先拦截，等清理完成再真正退出
+    destroyTray();          // 移除托盘图标，避免退出后残留
     await dshManager?.stop();
     app.exit();
   });

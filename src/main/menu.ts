@@ -21,6 +21,11 @@ export interface MenuHandlers {
   onRestartDsh(): void;
   /** 显示「关于」对话框 */
   onShowAbout(): void;
+  /**
+   * 退出应用：先置 isQuitting 标志再 quit，否则会被窗口 close 拦截
+   * 变成「最小化到托盘」，永远退不掉。
+   */
+  onQuit(): void;
 }
 
 /**
@@ -40,7 +45,8 @@ export function createAppMenu(handlers: MenuHandlers): Menu {
           submenu: [
             { label: '关于', click: () => handlers.onShowAbout() },
             { type: 'separator' },
-            { label: '退出', role: 'quit' },
+            // 退出必须走 onQuit（置 isQuitting），否则 close 拦截会吞掉退出
+            { label: '退出', accelerator: 'Cmd+Q', click: () => handlers.onQuit() },
           ],
         },
       ]
@@ -61,7 +67,8 @@ export function createAppMenu(handlers: MenuHandlers): Menu {
           click: () => handlers.onRestartDsh(),
         },
         { type: 'separator' },
-        { label: '退出', role: 'quit' },
+        // 退出必须走 onQuit（置 isQuitting），避免被窗口 close 拦截为「最小化到托盘」
+        { label: '退出', accelerator: isMac ? 'Cmd+Q' : 'Ctrl+Q', click: () => handlers.onQuit() },
       ],
     },
     {

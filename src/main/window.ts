@@ -89,9 +89,16 @@ function buildErrorHtml(opts: { title: string; detail: string }): string {
  *
  * @param port dsh 实际监听端口（由 dsh-process 解析得到）
  * @param host 监听地址，默认 127.0.0.1
+ * @param shouldHideToTray 判断「本次关闭应最小化到托盘」。
+ *     由 index.ts 注入：托盘可用 && 未真正退出 时为 true；
+ *     为 false 时（托盘不可用 / 正在退出）放行关闭，避免窗口关闭后无法找回。
  * @returns 已配置好的 BrowserWindow 实例
  */
-export function createMainWindow(port: number, host = '127.0.0.1'): BrowserWindow {
+export function createMainWindow(
+  port: number,
+  host = '127.0.0.1',
+  shouldHideToTray: () => boolean = () => false,
+): BrowserWindow {
   const win = new BrowserWindow({
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
@@ -109,6 +116,17 @@ export function createMainWindow(port: number, host = '127.0.0.1'): BrowserWindo
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  // 关闭拦截（核心行为）：用户点右上角 X / Cmd+W 时，
+  // 若「应最小化到托盘」（托盘可用且非退出流程），则阻止关闭并隐藏窗口；
+  // 托盘/菜单「退出」显式置 isQuitting 后，或托盘不可用时，放行真正关闭。
+  win.on('close', (event) => {
+    if (shouldHideToTray()) {
+      event.preventDefault();
+      win.hide();
+      log.info('窗口关闭请求被拦截，已最小化到系统托盘');
+    }
   });
 
   loadDsh(win, port, host);
@@ -170,4 +188,20 @@ export function showFatalError(win: BrowserWindow, opts: { title: string; detail
   log.warn(`展示错误兜底页: ${opts.title}`);
   const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(buildErrorHtml(opts))}`;
   void win.loadURL(dataUrl);
+}
+
+/**
+ * 显示并聚焦主窗口（处理隐藏/最小化状态）。
+ * 供系统托盘、macOS Dock 激活、二开实例聚焦共用。
+ *
+ * @param win 目标窗口；为空或已销毁时返回 false
+ * @returns 是否成功显示
+ */
+export function showMainWindow(win: BrowserWindow | null): boolean {
+  if (!win || win.isDestroyed()) return false;
+  // 隐藏（托盘化）→ show 恢复；最小化 → restore 还原
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return true;
 }

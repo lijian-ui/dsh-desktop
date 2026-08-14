@@ -20,6 +20,8 @@ directories:
 files:
   - dist/**
   - package.json
+  # 托盘/窗口图标：运行时从 asar 内读取 build/icon.png（黑鲸）
+  - build/icon.png
   # 排除源码映射与版本控制目录，减小体积
   - "!**/*.map"
   - "!**/.git/**"
