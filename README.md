@@ -1,5 +1,7 @@
 # dsh-desktop（DeepSeek Harness 桌面端）
 
+> **简体中文** | [English](README.en.md)
+
 基于官方 npm 包 `@deepseek-ai/dsh` 的 Electron 桌面壳。**方案 A** 的核心思路：
 Electron 主进程通过子进程启动官方 `dsh web`，再把其本地 HTTP 页面加载进窗口，
 从而把官方 WebUI 包装成一个独立桌面应用。
