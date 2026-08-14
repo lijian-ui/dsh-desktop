@@ -1,0 +1,53 @@
+# Electron Builder 打包配置（方案 A 桌面端）
+# ------------------------------------------------------------------
+# 关键决策（详见 README「打包与原生模块分发」章节）：
+#   1. npmRebuild: false
+#      原生模块（node-pty / koffi）由「系统 Node 运行的 dsh 子进程」使用，
+#      绝对不能用 Electron 的 ABI 重编译它们，否则子进程加载即崩溃。
+#   2. asarUnpack 解包原生目录
+#      Node 无法从 asar 压缩包内加载 .node / .dll / .exe，必须解包到真实文件系统。
+#      node-pty 的预编译二进制随 npm 包分发；koffi 的二进制由 build:native 步骤物化，
+#      二者均需解包。
+
+appId: com.deepseek.harness.desktop
+productName: DeepSeek Harness 桌面端
+copyright: Copyright © 2026
+
+directories:
+  # 打包产物输出目录（与 tsc 的 dist 区分，避免混淆）
+  output: dist-electron
+
+files:
+  - dist/**
+  - package.json
+  # 排除源码映射与版本控制目录，减小体积
+  - "!**/*.map"
+  - "!**/.git/**"
+
+# 启用 asar 压缩（源码受保护），但下方 asarUnpack 会把原生模块解包出来
+asar: true
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/koffi/**"
+  - "**/node_modules/**/*.node"
+  - "**/node_modules/**/*.dll"
+  - "**/node_modules/**/*.exe"
+
+# 关键：不要为 Electron 重编译原生模块（它们服务于系统 Node 的 dsh 子进程）
+npmRebuild: false
+
+win:
+  target:
+    - nsis
+  # 桌面端图标：多尺寸 ICO（16/24/32/48/64/128/256），由 scripts/generate-icon.cjs 从官方 SVG 编译生成
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false              # 非一键安装，展示安装向导
+  perMachine: false            # 当前用户安装（无需管理员）
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: DeepSeek Harness 桌面端
+
+# 暂不配置自动更新发布通道
+publish: null

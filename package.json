@@ -1,0 +1,30 @@
+{
+  "name": "dsh-desktop",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 官方 Web 形态的 Electron 桌面壳（方案 A：spawn 官方 dsh web 子进程）",
+  "main": "dist/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "electron .",
+    "dev": "npm run build && electron .",
+    "lint": "tsc --noEmit",
+    "build:native": "node scripts/build-native.cjs",
+    "pack": "npm run build:native && npm run build && electron-builder --dir",
+    "dist": "npm run build:native && npm run build && electron-builder",
+    "dist:win": "npm run build:native && npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.6.0"
+  }
+}

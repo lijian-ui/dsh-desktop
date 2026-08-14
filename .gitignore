@@ -1,0 +1,16 @@
+# 依赖与构建产物
+node_modules/
+dist/
+# electron-builder 打包输出（安装包与解压目录）
+dist-electron/
+
+# 日志
+*.log
+
+# 本地配置（可能包含 API Key 等敏感信息，切勿提交）
+config.json
+
+# 操作系统 / 编辑器
+.DS_Store
+.idea/
+.vscode/
