@@ -44,18 +44,19 @@ win:
     - nsis
   # 桌面端图标：多尺寸 ICO（16/24/32/48/64/128/256），由 scripts/generate-icon.cjs 从官方 SVG 编译生成
   icon: build/icon.ico
-  # 产物文件名统一用连字符分隔，避免空格（空格在发布 URL 编码 / 脚本处理时易出问题）
-  artifactName: DeepSeek-Harness-桌面端-Setup-${version}.${ext}
+  # 产物文件名纯 ASCII（仅英文+连字符）：GitHub Release 会对资产名做 unicode 规范化，
+  # 中文会被替换为 .（0.1.0 已验证：桌面端 → .），故文件名中避免中文与空格
+  artifactName: DeepSeek-Harness-${version}-Setup.${ext}
 
 mac:
   # macOS 产物名带架构后缀：避免 --x64 --arm64 双架构产物同名，
   # 否则 x64/arm64 的 dmg/zip 上传 GitHub Release 时互相覆盖
-  artifactName: DeepSeek-Harness-桌面端-${version}-${arch}.${ext}
+  artifactName: DeepSeek-Harness-${version}-${arch}.${ext}
   # macOS 图标：直接复用 build/icon.png（512×512 黑鲸），electron-builder 打包时自动转 icns
   icon: build/icon.png
 
 linux:
-  artifactName: DeepSeek-Harness-桌面端-${version}-${arch}.${ext}
+  artifactName: DeepSeek-Harness-${version}-${arch}.${ext}
 
 nsis:
   oneClick: false              # 非一键安装，展示安装向导
