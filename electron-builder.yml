@@ -48,6 +48,8 @@ mac:
   # macOS 产物名带架构后缀：避免 --x64 --arm64 双架构产物同名，
   # 否则 x64/arm64 的 dmg/zip 上传 GitHub Release 时互相覆盖
   artifactName: DeepSeek-Harness-桌面端-${version}-${arch}.${ext}
+  # macOS 图标：直接复用 build/icon.png（512×512 黑鲸），electron-builder 打包时自动转 icns
+  icon: build/icon.png
 
 linux:
   artifactName: DeepSeek-Harness-桌面端-${version}-${arch}.${ext}
