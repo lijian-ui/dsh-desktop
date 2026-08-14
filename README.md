@@ -1,4 +1,4 @@
-# dsh-desktop（DeepSeek Harness 桌面端 · 方案 A）
+# dsh-desktop（DeepSeek Harness 桌面端）
 
 基于官方 npm 包 `@deepseek-ai/dsh` 的 Electron 桌面壳。**方案 A** 的核心思路：
 Electron 主进程通过子进程启动官方 `dsh web`，再把其本地 HTTP 页面加载进窗口，
@@ -166,11 +166,18 @@ electron-app/
 # 开发调试用的免安装目录（验证打包结构）
 npm run pack
 
-# 产出 Windows 安装包（NSIS .exe）
-npm run dist:win
-# 或跨平台默认目标
-npm run dist
+# Windows 安装包（NSIS .exe）
+npm run build:electron:win
+
+# macOS 双架构（同时产出 x64 + arm64）
+npm run build:electron:mac
+
+# 其他平台 / 自定义参数：透传给 electron-builder
+npm run build:electron -- --linux
 ```
+
+> `build:electron` 是主命令（`build:native` → `tsc` → `electron-builder`），
+> 平台参数通过 `--` 透传：Windows 用 `--win`，macOS 双架构用 `--mac --x64 --arm64`。
 
 产物输出到 `dist-electron/`（已在 `.gitignore` 忽略）。
 
@@ -178,7 +185,7 @@ npm run dist
 
 ```bash
 # 1. 先打包（产出 dist-electron/ 下的安装包与 latest.yml）
-npm run dist:win
+npm run build:electron:win
 
 # 2. 发布（创建/更新 GitHub Release 并上传全部产物）
 npm run release:github
