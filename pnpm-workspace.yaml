@@ -1,0 +1,18 @@
+# pnpm workspace for the dsh-desktop extensions.
+#
+# NOTE: the desktop application root stays on npm (package-lock.json). This
+# workspace file is OPTIONAL for building the IM bundle — because
+# @deepseek-ai/cordis / @deepseek-ai/schemastery / @deepseek-ai/dsh-* are all
+# published to the public npm registry, the extension can be installed and built
+# standalone:
+#
+#   cd extensions/im-gateway
+#   npm install        # or: pnpm install
+#   npm run build      # tsdown -> lib/
+#   npm run typecheck  # tsc --noEmit
+#
+# The workspace is here so extensions can later be managed together
+# (`pnpm -r build`) if more bundles are added. It does NOT change how the
+# desktop app itself is installed/built.
+packages:
+  - 'extensions/*'

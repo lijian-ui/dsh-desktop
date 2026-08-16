@@ -28,6 +28,7 @@ import { app } from 'electron';
 import kill from 'tree-kill';
 import { createLogger } from './log';
 import { DshConfig, buildDshEnv } from './config';
+import { ensureImGatewayProfile, resolveBundledNodeModules } from './profile-init';
 
 const log = createLogger('dsh');
 
@@ -98,6 +99,16 @@ export class DshManager {
     this.stopping = false;
     this.restartCount = 0;
     this.epoch += 1; // 作废上一轮可能残留的自动重启定时器
+
+    // 首次启动离线部署 im-gateway：把插件固化进 `~/.dsh/profiles/<name>`
+    // （junction 到桌面壳 node_modules，依赖离线解析）。失败仅告警，不阻断 dsh 本体。
+    try {
+      const r = ensureImGatewayProfile(this.config);
+      log.info(`im-gateway profile 就绪: ${r.profileDir}`);
+    } catch (err) {
+      log.warn(`im-gateway profile 部署失败（不影响 dsh 启动）: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     let tryPort = this.config.port; // 0 表示由系统分配空闲端口
 
     for (let attempt = 1; attempt <= MAX_START_RETRIES; attempt++) {
@@ -156,13 +167,20 @@ export class DshManager {
    */
   private spawnOnce(desiredPort: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const { command, args } = resolveDshBin(this.config);
+      const { command, args, shell } = resolveDshBin(this.config);
 
-      // 组装 dsh web 的完整参数：
-      //   dsh web --host 127.0.0.1 --port <desiredPort> [额外参数...]
+      // 组装 dsh 的完整参数。
+      // 默认：dsh web --host ... --port ... [额外参数]
+      //   开发期 profile：dsh --profile <name> --host ... --port ... [额外参数]
+      // 注意 `--profile` 是 launcher 级全局参数，必须位于子命令/应用参数之前；
+      // `web` 本身是 `--profile web` 的别名，自定义 profile 无需再带 `web` 令牌
+      // （自定义 profile 已在其 bundles 中纳入 dsh-web-app，启动即拉起 web 服务）。
+      const profilePrefix = this.config.profile
+        ? ['--profile', this.config.profile]
+        : ['web'];
       const dshArgs = [
         ...args,
-        'web',
+        ...profilePrefix,
         '--host', this.config.host,
         '--port', String(desiredPort),
         ...this.config.extraArgs,
@@ -172,11 +190,15 @@ export class DshManager {
 
       // 使用系统 Node 运行 dsh（满足其 ^22.19 || >=24 的要求）。
       // stdio 设为 pipe 以便读取 stdout / stderr 解析端口与日志。
+      // shell 仅在回退到 npx（.cmd shim）时为 true；正常路径直接 spawn 系统
+      // Node + bin.js，child.pid 即真正的 node 进程，退出时 tree-kill 才能精准命中，
+      // 不会因中间套一层 cmd.exe 而留下孤儿进程。
       const child = spawn(command, dshArgs, {
-        env: buildDshEnv(this.config),
+        // NODE_PATH 兜底：插件 junction 的物理目标在桌面壳 node_modules，依赖解析
+        // 已能自动向上命中；再加 NODE_PATH 覆盖 dsh 可能改变解析环境的场景（保险）。
+        env: addNodePath(buildDshEnv(this.config), this.config),
         stdio: ['ignore', 'pipe', 'pipe'],
-        // Windows 下调用 .cmd / npx 需要 shell；*nix 下直接执行 bin 即可
-        shell: process.platform === 'win32',
+        shell,
       });
 
       this.child = child;
@@ -320,60 +342,51 @@ export class DshManager {
 }
 
 /**
+ * 在环境变量里追加桌面壳 node_modules 到 NODE_PATH（模块解析兜底）。
+ * 插件通过 junction 链接进 profile，其物理目标在桌面壳 node_modules 内，
+ * node 从物理路径向上查找依赖已能命中；NODE_PATH 额外覆盖 dsh 内部
+ * 可能改变模块解析的场景。
+ */
+function addNodePath(env: NodeJS.ProcessEnv, config: DshConfig): NodeJS.ProcessEnv {
+  const base = (env.NODE_PATH ?? '').split(path.delimiter).filter(Boolean);
+  const bundled = resolveBundledNodeModules(config);
+  if (!base.includes(bundled)) base.push(bundled);
+  env.NODE_PATH = base.join(path.delimiter);
+  return env;
+}
+
+/**
  * 解析 dsh 可执行文件路径。
  *
- * 开发期：优先使用本项目本地安装的 dsh（node_modules/.bin/dsh）。
+ * 开发期与打包后统一：都用「系统 Node + dsh 的 lib/bin.js」启动。
+ * 这样绕开 npm 生成的 `.cmd` shim（shim 内部也是调 node 跑 bin.js，但会额外
+ * 套一层 cmd.exe），让 `child.pid` 直接指向真正的 node 进程 —— 退出时 tree-kill
+ * 才能精准命中，不会因中间隔着 cmd.exe 而留下孤儿进程。
  *
- * 打包后（app.isPackaged）：
- *   - dsh 及其全部依赖已被 asarUnpack 解包到 app.asar.unpacked/node_modules/，
- *     系统 Node 可直接读取真实文件。
- *   - 命令改为「系统 Node + dsh 的 lib/bin.js」：
- *     * 系统 Node 路径 = config.nodePath（用户显式指定）→ 常见路径探测 → 报错
- *     * macOS GUI 启动的进程 PATH 不完整，绝不能依赖 npx / 相对 node 命令
+ * 打包后（app.isPackaged）dsh 及依赖被 asarUnpack 到 app.asar.unpacked/node_modules/，
+ * 开发期则直接用项目根 node_modules 里的 bin.js。
  *
  * @param config 当前配置（携带 nodePath）
- * @returns 命令与基础参数，例如：
- *   开发期 { command: '/.../node_modules/.bin/dsh', args: [] }
- *   打包后 { command: '/usr/local/bin/node', args: ['/.../app.asar.unpacked/.../dsh/lib/bin.js'] }
+ * @returns 命令、基础参数、以及是否需要 shell（仅 npx 兜底需要，正常路径为 false）
  */
-function resolveDshBin(config: DshConfig): { command: string; args: string[] } {
-  // ── 打包后场景：node_modules 已在 app.asar.unpacked，直接用系统 Node 跑 dsh bin ──
-  if (app.isPackaged) {
-    // electron-builder 把 asarUnpack 内容放在 resources/app.asar.unpacked/
-    const unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
-    const dshBinJs = path.join(
-      unpackedDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js',
-    );
+function resolveDshBin(config: DshConfig): { command: string; args: string[]; shell: boolean } {
+  const dshBinJs = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    : path.join(process.cwd(), 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
 
-    if (fs.existsSync(dshBinJs)) {
-      const nodePath = resolveSystemNode(config);
-      if (nodePath) {
-        log.info(`打包版使用系统 Node 启动 dsh: ${nodePath}`);
-        return { command: nodePath, args: [dshBinJs] };
-      }
-      // Node 路径未解析到：走 npx 兜底（若 PATH 恰好可用），最终由调用方报错
-      log.warn('未找到系统 Node 可执行文件，回退到 npx 调用');
-      return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+  if (fs.existsSync(dshBinJs)) {
+    const nodePath = resolveSystemNode(config);
+    if (nodePath) {
+      log.info(`${app.isPackaged ? '打包版' : '开发期'}使用系统 Node 启动 dsh: ${nodePath}`);
+      return { command: nodePath, args: [dshBinJs], shell: false };
     }
-
-    log.warn(`打包后未找到 dsh 可执行文件: ${dshBinJs}，回退到 npx 调用`);
-    return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+    // Node 路径未解析到：走 npx 兜底（npx 是 .cmd shim，需要 shell）
+    log.warn('未找到满足 dsh 要求的系统 Node，回退到 npx 调用');
+    return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'], shell: true };
   }
 
-  // ── 开发期：本地 node_modules/.bin/dsh ──
-  const binDir = path.join(process.cwd(), 'node_modules', '.bin');
-  const localBin = process.platform === 'win32'
-    ? path.join(binDir, 'dsh.cmd')
-    : path.join(binDir, 'dsh');
-
-  // 本地安装存在时优先使用，路径最确定、启动最快
-  if (fs.existsSync(localBin)) {
-    return { command: localBin, args: [] };
-  }
-
-  // 兜底：依赖 npx 调用本地已安装的包（--no-install 避免联网下载）
-  log.warn('未找到本地 dsh 可执行文件，回退到 npx 调用');
-  return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'] };
+  log.warn(`未找到 dsh 可执行文件: ${dshBinJs}，回退到 npx 调用`);
+  return { command: 'npx', args: ['--no-install', '@deepseek-ai/dsh'], shell: true };
 }
 
 /**

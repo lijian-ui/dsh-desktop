@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import { app } from 'electron';
 
 /** 桌面端运行配置 */
@@ -34,6 +35,15 @@ export interface DshConfig {
    * 缺省时按常见安装路径探测，找不到则启动报错提示配置此项。
    */
   nodePath?: string;
+  /**
+   * 开发期使用的 dsh profile 名称（可选）。
+   * 设置后，桌面壳会以 `dsh --profile <name>` 启动（取代默认的 `dsh web`），
+   * 从而加载自定义 bundle 栈（例如 @dsh/im-gateway）。profile 在官方默认
+   * 目录 `~/.dsh/profiles/<name>` 解析；`im-dev` profile 通过 junction 链接回
+   * 仓库内的 `resources/dsh-home/profiles/im-dev`，定义随仓库走。
+   * 生产/默认模式不设置此项，沿用官方 `web` profile。
+   */
+  profile?: string;
 }
 
 /** 本地配置文件名称（位于项目根或用户数据目录） */
@@ -80,6 +90,7 @@ export function loadConfig(): DshConfig {
     apiKey,
     extraArgs: fileConfig.extraArgs ?? [],
     nodePath: fileConfig.nodePath,
+    profile: process.env.DSH_PROFILE || fileConfig.profile,
   };
 }
 
@@ -97,6 +108,13 @@ export function buildDshEnv(config: DshConfig): NodeJS.ProcessEnv {
     // dsh 官方约定的 API Key 环境变量名
     env.DEEPSEEK_API_KEY = config.apiKey;
   }
+
+  // 显式指向官方默认目录 `~/.dsh`，消除父进程（Electron）残留 DSH_HOME 的
+  // 不确定性。dsh 的所有用户数据（settings.yaml / credentials / sessions /
+  // profiles / storages）统一存放在这里；`dsh --profile <name>` 也在这里的
+  // `profiles/<name>` 解析。显式设置比依赖默认值更稳——若父进程恰好
+  // export 过 DSH_HOME，子进程会继承到错误路径导致 credentials 读不到 key。
+  env.DSH_HOME = path.join(homedir(), '.dsh');
 
   return env;
 }

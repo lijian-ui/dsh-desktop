@@ -1,6 +1,8 @@
 # 依赖与构建产物
 node_modules/
 dist/
+# 扩展包 tsdown 构建产物
+extensions/**/lib/
 # electron-builder 打包输出（安装包与解压目录）
 dist-electron/
 
@@ -25,3 +27,15 @@ scripts/publish-github.mjs
 .idea/
 .vscode/
 .codeartsdoer
+
+# 第三方参考源码（pi-desk-top 等），不随仓库发布
+参考项目/
+
+# 项目记忆数据（本地）
+.workbuddy/
+
+# dsh 开发残留数据（sessions 等），非仓库内容
+resources/dsh-home/
+
+# extensions 为独立仓库（github.com/lijian-ui/dsh-im-gateway），桌面端通过 npm 依赖 @lijian-ui/dsh-im-gateway 引用
+extensions/

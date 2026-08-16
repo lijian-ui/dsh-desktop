@@ -120,6 +120,7 @@
     "@deepseek-ai/dsh-web": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-workflow": "^0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@lijian-ui/dsh-im-gateway": "^0.1.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.0",
     "ajv": "^8.0.0",

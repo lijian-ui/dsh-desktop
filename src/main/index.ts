@@ -199,4 +199,14 @@ if (!app.requestSingleInstanceLock()) {
     await dshManager?.stop();
     app.exit();
   });
+
+  // 兜底：终端 Ctrl+C（SIGINT）/ kill（SIGTERM）等信号退出时，Node 进程默认
+  // 直接终止、不触发 before-quit 事件，dsh 子进程会残留成孤儿。这里手动补一次
+  // 进程树清理再退出（开发期 npm run dev + Ctrl+C 主要靠这条；打包后 GUI 无信号场景则无害）。
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(sig, () => {
+      log.warn(`收到 ${sig} 信号，清理 dsh 子进程后退出`);
+      void (dshManager?.stop() ?? Promise.resolve()).finally(() => app.exit());
+    });
+  }
 }
