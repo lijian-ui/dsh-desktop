@@ -1,31 +1,32 @@
-# DeepSeek Harness 桌面端 v0.2.0
+# DeepSeek Harness 桌面端 v0.3.0
 
-> 发布日期：2026-08-14
+> 发布日期：2026-08-16
 
 ## 核心亮点
 
-**🎉 内置 Node.js 运行时——开箱即用，无需用户安装 Node**
+**🎉 IM 网关离线集成——内置钉钉 / QQ / 个人微信，下载即用**
 
-v0.2.0 在安装包内捆绑了精简版 Node.js 运行时（v24.19.0），彻底解决用户环境的 Node 依赖问题：
+v0.3.0 将 IM 网关插件（@lijian-ui/dsh-im-gateway）完整内置进桌面端，插件及其全部依赖随安装包分发，首次启动自动完成部署，**无需联网、无需手动安装插件**：
 
-- 用户**不再需要预装 Node.js**，安装即用
-- 不再受 nvm / Homebrew / 系统旧版 Node 的路径与版本问题困扰
-- 子进程优先使用内置 Node，版本永远满足 dsh 的 `^22.19 || >=24` 要求
+- **钉钉**：出站 WebSocket 长连接，群聊 + 单聊，**AI 卡片流式输出**（边生成边回复），@ 提及过滤
+- **QQ**：官方 SDK WebSocket 网关，私聊 + 群聊，**扫码绑定机器人**（免去开放平台手动创建），私聊流式消息
+- **个人微信**：iLink 长轮询协议，**扫码登录 + 配对码**，媒体收发
+
+使用：设置 → 「IM 通道」→ 添加通道 → QQ / 微信扫码绑定，或钉钉填 AppKey/AppSecret → 保存即生效。
+
+> 插件同时以独立形式发布（npm / GitHub 双通道）：`dsh plugin --profile web add @lijian-ui/dsh-im-gateway`，不用桌面端也能接入。
 
 ## 新增与改进
 
-- **内置 Node 运行时**：打包版自动携带，用户环境零依赖
-- **Node 路径探测增强**：
-  - 内置 Node → `config.json` 的 `nodePath` → nvm → Homebrew → 官方路径，按序解析
-  - 每个候选自动做版本校验，旧版（如系统 v18）自动跳过
-- **修复 M 芯片（Apple Silicon）启动失败**：
-  - koffi 平台拆分包自动补齐（`@koromix/koffi-darwin-arm64` 等）
-  - sharp / libvips 平台包自动补齐（`@img/sharp-*`）
-- **修复依赖收集遗漏**：dsh 的 108 个 peer 依赖（`@deepseek-ai/cordis-plugin-group` 等）全部随包分发，不再出现 `ERR_MODULE_NOT_FOUND`
-- **错误信息更友好**：dsh 启动失败时直接展示其真实输出（最近 10 行），方便排查
-- **系统托盘常驻**：关闭窗口最小化到托盘（Windows / macOS 同步），托盘菜单支持显示/重启/退出
-- **中文菜单栏**：文件 / 编辑 / 视图 / 窗口 / 帮助，含「重启 dsh 服务」「关于」
-- **健壮性设计**：子进程崩溃自动重启（指数退避）、端口冲突自动顺延、加载失败中文错误页 + 一键重连、退出按进程树清理
+- **IM 网关离线集成**
+  - 插件内置：`@lijian-ui/dsh-im-gateway`（npm 0.1.x）随包分发，依赖离线解析（`nodeLinker: hoisted` + NODE_PATH 兜底）
+  - 首次启动自动部署：`src/main/profile-init.ts` 创建 dsh profile、写入插件依赖与层栈、junction 链接插件实体，控制台可见 `im-gateway profile 就绪`
+  - 多机器人实例：同一渠道可配置多个 bot，各自独立凭据
+- **自动更新**：接入 electron-updater（GitHub Release 通道），新版本自动检测与更新（设置 → 关于 → 检查更新）
+- **依赖守护**：verify-deps 打包前自动校验并补齐缺失的 peer 依赖，杜绝 `ERR_MODULE_NOT_FOUND`
+- **原生依赖拆分包**：build-native 按目标平台（win / mac）补齐 sharp / libvips / koffi 等平台包
+- **DSH_HOME 显式化**：统一指向 `~/.dsh`，消除父进程残留环境变量的不确定性（credentials 读取更稳）
+- **信号退出兜底**：Ctrl+C / kill 时清理 dsh 子进程树，不再残留孤儿进程
 
 ## 支持平台
 
@@ -36,13 +37,13 @@ v0.2.0 在安装包内捆绑了精简版 Node.js 运行时（v24.19.0），彻�
 
 ## 环境要求
 
-- **无需预装 Node.js**（v0.2.0 内置）
+- **无需预装 Node.js**（v0.2.0 起内置精简版运行时）
 - Windows 10+ / macOS 12+
 
 ## 已知限制
 
 - macOS 安装包未做 Apple 开发者签名，首次打开需右键「打开」或按 README 指引放行 Gatekeeper
-- 自动更新通道尚未接入，后续版本将通过 GitHub Release 提供
+- IM 网关的扫码登录依赖网络访问 QQ / 微信官方服务
 
 ## 反馈
 
