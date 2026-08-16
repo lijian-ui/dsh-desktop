@@ -983,6 +983,32 @@ slots 渲染器把 `inject()` 返回的 `hooks` 对象按 `'use' + key[0].toUppe
 - **无图标库**（lucide 等非平台模块不能 import）：图标用内联 SVG。
 - 参考实现：`extensions/im-gateway/src/client/`（`index.ts` 注册、`ImChannelsSection.ts` 页面、`ImChannelModal.ts` 弹窗）。冒烟：`scripts/probe-client-factory.mjs`（node:vm 执行 factory）+ `scripts/probe-client-bundle.mjs`（HTTP 验证 bundle 被 serve）。
 
+### 10.5 主题适配：靠 CSS 变量，不是靠适配代码（实跑验证）
+
+**结论**：client 半**不需要任何明暗主题适配代码**——只要样式引用 dsh 的设计 token（CSS 变量），明/暗主题自动跟随（实测通过，明暗切换零改动）。
+
+**原理**：dsh 的明暗主题本质是**设计令牌（design token）**驱动——主题相关颜色全部定义为 CSS 变量（`--dsw-*` 前缀，挂在 document 根作用域）。切换明/暗时这些**变量值**整体替换，页面所有元素跟着变。client 半渲染在官方 dsh web UI 的 DOM 树里（settings slot 注入），天然处于变量作用域内，引用变量即自动适配。
+
+**写法规范**（`extensions/im-gateway/src/client/ImChannelsSection.ts` 为范例，25 处引用）：
+
+```ts
+// 每个颜色都写成 var(--dsw-alias-xxx, fallback)：
+borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)'      // 边框
+color: 'var(--dsw-alias-label-primary, inherit)'                // 文字
+background: 'var(--dsw-alias-bg-layer-3, #eee)'                 // 背景
+color: 'var(--dsw-alias-label-secondary, #555)'                 // 次要文字
+background: 'var(--dsw-alias-state-business-primary, #185FA5)'  // 主色/按钮
+```
+
+- 前缀约定：`--dsw-alias-*` = 语义别名（bg-layer / label / border / state-*），比 raw color 更抗主题重构
+- 逗号后**必须带 fallback**：变量缺失时兜底（dsh 升级改变量名也不会崩成无色）
+
+**故意写死的两类**（设计意图，非疏漏）：
+- 按钮文字 `#fff`——按钮背景是品牌主色，白字在明暗主题下都正确
+- 渠道图标品牌色（QQ `#12B7F5`、微信 `#07C160`、钉钉 `#0089FF`、企微 `#0082EF`）——品牌色不分明暗，保持原样
+
+**教训**：移植参考项目/写新 client 时，沿用 dsh/typert 生态的 `--dsw-*` token 命名规范（别自己发明颜色），主题适配是"规范红利"，不是额外工作量。
+
 ---
 
 ## 11. 在你的桌面项目（`dsh-desktop`）中接入插件
