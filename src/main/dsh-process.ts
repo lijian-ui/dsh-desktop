@@ -100,13 +100,14 @@ export class DshManager {
     this.restartCount = 0;
     this.epoch += 1; // 作废上一轮可能残留的自动重启定时器
 
-    // 首次启动离线部署 im-gateway：把插件固化进 `~/.dsh/profiles/<name>`
-    // （junction 到桌面壳 node_modules，依赖离线解析）。失败仅告警，不阻断 dsh 本体。
+    // 首次启动离线部署自研插件（im-gateway / session-cleaner）：
+    // 把插件固化进 `~/.dsh/profiles/<name>`（junction 到桌面壳 node_modules，
+    // 依赖离线解析）。失败仅告警，不阻断 dsh 本体。
     try {
       const r = ensureImGatewayProfile(this.config);
-      log.info(`im-gateway profile 就绪: ${r.profileDir}`);
+      log.info(`插件 profile 就绪: ${r.profileDir}（${r.pluginSources.length} 个 bundle）`);
     } catch (err) {
-      log.warn(`im-gateway profile 部署失败（不影响 dsh 启动）: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(`插件 profile 部署失败（不影响 dsh 启动）: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     let tryPort = this.config.port; // 0 表示由系统分配空闲端口

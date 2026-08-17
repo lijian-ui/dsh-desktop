@@ -137,7 +137,8 @@
     "react-dom": "^18.2.0",
     "tree-kill": "^1.2.2",
     "ws": "^8.18.0",
-    "zod": "^3.25.28 || ^4"
+    "zod": "^3.25.28 || ^4",
+    "@lijian-ui/dsh-session-cleaner": "^0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

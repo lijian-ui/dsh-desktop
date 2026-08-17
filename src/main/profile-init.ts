@@ -24,8 +24,12 @@ import { homedir } from 'os';
 import { app } from 'electron';
 import { DshConfig } from './config';
 
-/** 内置的 IM 网关插件包名（与 npm 发布名一致） */
+/** 内置的自研插件包名（与 npm 发布名一致）——打包版随桌面壳分发并自动启用 */
 export const IM_GATEWAY_BUNDLE = '@lijian-ui/dsh-im-gateway';
+export const SESSION_CLEANER_BUNDLE = '@lijian-ui/dsh-session-cleaner';
+
+/** 全部自研插件（逐个建立 profile junction + 层栈声明） */
+export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];
@@ -58,8 +62,8 @@ export function resolveBundledNodeModules(config: DshConfig): string {
 }
 
 /** 桌面壳 node_modules 里插件的实体路径（junction 的目标） */
-function resolvePluginSource(config: DshConfig): string {
-  return path.join(resolveBundledNodeModules(config), ...IM_GATEWAY_BUNDLE.split('/'));
+function resolvePluginSource(bundleName: string, config: DshConfig): string {
+  return path.join(resolveBundledNodeModules(config), ...bundleName.split('/'));
 }
 
 /** 计算 dsh 用户数据目录（与 config.ts buildDshEnv 的 DSH_HOME 保持一致） */
@@ -80,7 +84,7 @@ function readProfileManifest(profileDir: string): Record<string, unknown> | null
 }
 
 /**
- * 把插件 bundle 补齐到 profile 的 package.json（dependencies + bundles 数组）。
+ * 把全部插件 bundle 补齐到 profile 的 package.json（dependencies + bundles 数组）。
  * 返回 true 表示发生了写入。
  */
 function patchProfileManifest(profileDir: string, manifest: Record<string, unknown>): boolean {
@@ -90,14 +94,16 @@ function patchProfileManifest(profileDir: string, manifest: Record<string, unkno
   const bundles = (profile.bundles ?? []) as string[];
 
   let changed = false;
-  if (!(IM_GATEWAY_BUNDLE in deps)) {
-    deps[IM_GATEWAY_BUNDLE] = '^0.1.0';
-    changed = true;
-  }
-  // 显式把插件写进层栈（reconcile 也会补，这里双保险保证顺序在官方 bundle 之后）
-  if (!bundles.includes(IM_GATEWAY_BUNDLE)) {
-    bundles.push(IM_GATEWAY_BUNDLE);
-    changed = true;
+  for (const bundle of PLUGIN_BUNDLES) {
+    if (!(bundle in deps)) {
+      deps[bundle] = '^0.1.0';
+      changed = true;
+    }
+    // 显式把插件写进层栈（reconcile 也会补，这里双保险保证顺序在官方 bundle 之后）
+    if (!bundles.includes(bundle)) {
+      bundles.push(bundle);
+      changed = true;
+    }
   }
   if (!BASE_BUNDLES.every((b) => bundles.includes(b))) {
     for (const b of [...BASE_BUNDLES].reverse()) {
@@ -114,11 +120,11 @@ function patchProfileManifest(profileDir: string, manifest: Record<string, unkno
 }
 
 /**
- * 确保 `profile/node_modules/@lijian-ui/dsh-im-gateway` junction 存在且指向当前实体。
+ * 确保 `profile/node_modules/<bundle>` junction 存在且指向当前实体。
  * 目标不一致（升级/换路径）时删除重建。
  */
-function ensurePluginLink(profileDir: string, source: string): void {
-  const linkPath = path.join(profileDir, 'node_modules', ...IM_GATEWAY_BUNDLE.split('/'));
+function ensurePluginLink(profileDir: string, bundleName: string, source: string): void {
+  const linkPath = path.join(profileDir, 'node_modules', ...bundleName.split('/'));
   if (!fs.existsSync(source)) {
     throw new Error(`插件实体不存在（请确认已 npm install 或打包完整）: ${source}`);
   }
@@ -143,10 +149,9 @@ function ensurePluginLink(profileDir: string, source: string): void {
  *
  * @returns 部署详情（供日志）；任何失败以 throw 表达，由调用方决定是否阻断。
  */
-export function ensureImGatewayProfile(config: DshConfig): { profileDir: string; pluginSource: string } {
+export function ensureImGatewayProfile(config: DshConfig): { profileDir: string; pluginSources: string[] } {
   const profileName = config.profile ?? 'web';
   const profileDir = path.join(resolveDshHome(), 'profiles', profileName);
-  const pluginSource = resolvePluginSource(config);
 
   fs.mkdirSync(profileDir, { recursive: true });
 
@@ -174,8 +179,13 @@ export function ensureImGatewayProfile(config: DshConfig): { profileDir: string;
   }
   patchProfileManifest(profileDir, manifest);
 
-  // 3. 插件 junction（依赖解析靠它的物理目标向上命中桌面壳 node_modules）
-  ensurePluginLink(profileDir, pluginSource);
+  // 3. 全部插件 junction（依赖解析靠它的物理目标向上命中桌面壳 node_modules）
+  const pluginSources: string[] = [];
+  for (const bundle of PLUGIN_BUNDLES) {
+    const source = resolvePluginSource(bundle, config);
+    ensurePluginLink(profileDir, bundle, source);
+    pluginSources.push(source);
+  }
 
-  return { profileDir, pluginSource };
+  return { profileDir, pluginSources };
 }
