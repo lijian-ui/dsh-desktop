@@ -27,9 +27,13 @@ import { DshConfig } from './config';
 /** 内置的自研插件包名（与 npm 发布名一致）——打包版随桌面壳分发并自动启用 */
 export const IM_GATEWAY_BUNDLE = '@lijian-ui/dsh-im-gateway';
 export const SESSION_CLEANER_BUNDLE = '@lijian-ui/dsh-session-cleaner';
+/** 文件管理面板插件（Explorer + Preview + `@` 提及引用）——开发期以本地
+ *  symlink 接入 `extensions/file-manager`，不发布到 npm，因此仅在
+ *  `PLUGIN_BUNDLES` 里登记、不进根 package.json 依赖，避免 `npm install` 404。 */
+export const FILE_MANAGER_BUNDLE = '@lijian-ui/dsh-file-manager';
 
 /** 全部自研插件（逐个建立 profile junction + 层栈声明） */
-export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE];
+export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];
