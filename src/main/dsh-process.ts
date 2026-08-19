@@ -330,14 +330,44 @@ export class DshManager {
         resolve();
         return;
       }
-      kill(child.pid, 'SIGTERM', (err) => {
-        if (err) {
-          log.warn(`停止 dsh 进程树失败（pid=${child.pid}）: ${err.message}`);
+      const pid = child.pid;
+      let settled = false;
+      const finish = (reason?: string) => {
+        if (settled) return;
+        settled = true;
+        if (reason) {
+          log.warn(`dsh 进程树清理兜底（pid=${pid}）: ${reason}`);
         } else {
-          log.info(`已停止 dsh 进程树（pid=${child.pid}）`);
+          log.info(`已停止 dsh 进程树（pid=${pid}）`);
         }
         resolve();
+      };
+
+      // 主清理：tree-kill 强制杀整棵进程树（含 dsh 内部 vite / node-pty 开的 shell）。
+      // 注意：绝不依赖其回调 resolve——Windows 上 `taskkill /T` 在杀 conhost / csrss
+      // 这类内核态孙进程时偶发挂起，回调永不触发会导致 stop() 永远 pending，进而
+      // before-quit 的 await 永不返回、app.exit() 永不调用，Electron 主进程卡死、
+      // npm 的 shell 无法返回（即用户遇到的「结束 run dev 卡主」）。
+      // 因此这里 fire-and-forget，统一交给下方 exit / 超时兜底收口。
+      kill(pid, 'SIGTERM', (err) => {
+        if (err) {
+          log.warn(`停止 dsh 进程树失败（pid=${pid}）: ${err.message}`);
+        }
       });
+
+      // dsh web 主进程真正退出即视为清理完成（其孙进程随之被 OS 回收）
+      child.on('exit', () => finish());
+
+      // 兜底：最多等 2.5s，超时则强制放行退出，杜绝卡死 npm。
+      // 超时后再补一刀强制信号，尽量清掉残留孙进程（fire-and-forget，不阻塞）。
+      setTimeout(() => {
+        finish('清理超时（疑似 taskkill 挂起），强制继续退出');
+        try {
+          kill(pid, 'SIGKILL', () => {});
+        } catch {
+          /* 进程可能已不存在，忽略 */
+        }
+      }, 2500);
     });
   }
 }
