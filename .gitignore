@@ -39,3 +39,6 @@ resources/dsh-home/
 
 # extensions 为独立仓库（github.com/lijian-ui/dsh-im-gateway），桌面端通过 npm 依赖 @lijian-ui/dsh-im-gateway 引用
 extensions/
+
+# 临时调试/验证脚本（一次性使用，不纳入版本控制）
+*.ps1
