@@ -184,6 +184,9 @@ export class DshManager {
         ...profilePrefix,
         '--host', this.config.host,
         '--port', String(desiredPort),
+        // 桌面端有自己的窗口，无需 dsh-web-app 再打开系统浏览器。
+        // 放在 extraArgs 之前，用户仍可通过 extraArgs 覆盖。
+        '--no-open',
         ...this.config.extraArgs,
       ];
 

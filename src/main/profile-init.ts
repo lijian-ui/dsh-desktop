@@ -35,9 +35,13 @@ export const FILE_MANAGER_BUNDLE = '@lijian-ui/dsh-file-manager';
  *  已发布到 npm（`@lijian-ui/dsh-term`，含 dock scale 防抖修复），在根 package.json
  *  依赖中声明，由 `npm install` 从 registry 拉取；profile junction 指向桌面壳 node_modules 中的实体。 */
 export const DSH_TERM_BUNDLE = '@lijian-ui/dsh-term';
+/** 技能管理插件（skill 列表 / 启用 / 停用 / 删除 / 添加 / 迁移）。
+ *  已发布到 npm（`@lijian-ui/dsh-skill-manage`），在根 package.json 依赖中声明，
+ *  由 `npm install` 从 registry 拉取；profile junction 指向桌面壳 node_modules 中的实体。 */
+export const SKILL_MANAGE_BUNDLE = '@lijian-ui/dsh-skill-manage';
 
 /** 全部自研插件（逐个建立 profile junction + 层栈声明） */
-export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE];
+export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];
