@@ -428,7 +428,38 @@ border: 1px solid var(--dsw-alias-border-l2);
 
 所有 `#fff`、`#ccc`、`rgba(0,0,0,...)` 都应替换为对应 token。唯一例外是 `box-shadow` 中的轻微阴影色（如 `rgba(0,0,0,.25)`），因为阴影在亮暗模式下都需要一点深度感。
 
-### 7.4 CSS 类名加前缀
+### 7.4 反色按钮的 token 映射（踩坑记录）
+
+**场景：** 插件中有"黑底白字"的圆形图标按钮（如 dock 入口按钮），原硬编码为 `background:#000; color:#fff`。迁移到 `--dsw-*` token 时，**不能**把 `#000` 映射为 `--dsw-alias-bg-base`。
+
+**错误原因：** `--dsw-alias-bg-base` 是**页面背景色**，明亮主题下是 `#fff`（白色），不是黑色。把它当按钮背景会导致明亮主题下按钮变成白底，完全不可见。
+
+**token 实际值参考：**
+
+| Token | 明亮主题 | 暗色主题 |
+|-------|---------|---------|
+| `--dsw-alias-bg-base` | `#fff`（白） | `#0f1115` 附近（深） |
+| `--dsw-alias-label-primary` | `#0f1115`（接近黑） | 浅色 |
+| `--dsw-alias-bg-layer-2` | `#fff`（白） | 深色 |
+
+**正确做法：** 对于"反色按钮"（明亮主题黑底白字、暗色主题白底黑字），用**文字色 token 当背景**，**背景色 token 当文字色**，实现自动反色：
+
+```css
+/* ❌ 错误：bg-base 在明亮主题下是白色，按钮不可见 */
+.dock-btn { background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
+
+/* ✅ 正确：label-primary 当背景（明亮=黑），bg-base 当文字（明亮=白） */
+.dock-btn { background: var(--dsw-alias-label-primary); color: var(--dsw-alias-bg-base); }
+
+/* ✅ hover：用 color-mix 把背景色稍浅化 */
+.dock-btn:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 85%, var(--dsw-alias-bg-base)); }
+```
+
+**关键原则：** `--dsw-alias-bg-*` 系列是**背景层级**（base/layer-1/2/3），在明亮主题下都是浅色；`--dsw-alias-label-*` 系列是**文字色阶**，在明亮主题下是深色。需要"深色背景"时，用 label token 而非 bg token。
+
+**受影响文件：** `dsh-term` 和 `file-manager` 的 `DockItem.tsx` 已修复（2026-08-23）。
+
+### 7.5 CSS 类名加前缀
 
 插件 CSS 运行在全局作用域，类名必须加前缀避免冲突：
 
@@ -442,7 +473,7 @@ border: 1px solid var(--dsw-alias-border-l2);
 .SKM_button { ... }
 ```
 
-### 7.5 React 18 StrictMode 重复注入
+### 7.6 React 18 StrictMode 重复注入
 
 `useEffect` 在 StrictMode 下会执行两次。`injectCss` 必须用 `document.querySelector` 做幂等检查：
 
@@ -454,7 +485,7 @@ function injectCss(): void {
 }
 ```
 
-### 7.6 从 primitives 导入的选择性
+### 7.7 从 primitives 导入的选择性
 
 | 组件类型 | 是否推荐直接导入 | 理由 |
 |----------|-----------------|------|
@@ -463,7 +494,7 @@ function injectCss(): void {
 | `Button` / `Input` | ⚠️ 谨慎 | API 可能随官方升级变动 |
 | `Modal` / `Menu` | ⚠️ 谨慎 | 交互逻辑复杂，自己写更可控 |
 
-### 7.7 参考实现
+### 7.8 参考实现
 
 `@lijian-ui/dsh-skill-manage` 插件是策略 B 的完整参考实现：
 - `extensions/dsh-skill-manage/src/client/SkillManageSection.tsx` — 主组件

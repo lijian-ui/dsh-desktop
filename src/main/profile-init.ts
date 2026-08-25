@@ -39,9 +39,14 @@ export const DSH_TERM_BUNDLE = '@lijian-ui/dsh-term';
  *  已发布到 npm（`@lijian-ui/dsh-skill-manage`），在根 package.json 依赖中声明，
  *  由 `npm install` 从 registry 拉取；profile junction 指向桌面壳 node_modules 中的实体。 */
 export const SKILL_MANAGE_BUNDLE = '@lijian-ui/dsh-skill-manage';
+/** 定时任务插件（cron 表达式调度 + 跨 session 消息注入 + 四级通知）。
+ *  纯 UI 管理、零 LLM tool，到期以 `请根据系统指令开始执行任务。` 注入目标 session。
+ *  在根 package.json 依赖中声明，由 `npm install` 从 registry 拉取；
+ *  profile junction 指向桌面壳 node_modules 中的实体。 */
+export const SCHEDULE_VIEW_BUNDLE = '@lijian-ui/dsh-schedule-view';
 
 /** 全部自研插件（逐个建立 profile junction + 层栈声明） */
-export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE];
+export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE, SCHEDULE_VIEW_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];

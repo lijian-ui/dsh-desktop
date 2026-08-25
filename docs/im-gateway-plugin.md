@@ -484,3 +484,133 @@ dsh-credentials-local 服务（`$DSH_HOME/.credentials.yaml`）自动读取。
 ### 一句话总结
 
 把旧 `im/` 模块"翻译"成 cordis 插件：`im-gateway`（核心，承载 `types.ts` + `im-gateway.ts` 的全部渠道无关逻辑，并对齐 dsh 的 `ctx.sessions`）做 Service Definition + Consumer；钉钉/QQ 照搬各自适配器做 Provider；维修渠道以微信适配器为 REST 模板新建。三者逻辑独立、配置隔离、可单独开关与分发。**唯一需要实地验证的接缝是第 2.5 节的 harness 会话事件订阅方式**——建议先跑通钉钉最小 PoC。
+
+---
+
+## 7. Agent 工具/Preset 踩坑记录（dsh-schedule-view & im-gateway 共用）
+
+> 以下记录来自 dsh-schedule-view 定时任务插件的开发实践，im-gateway 存在同样的问题，需同步修复。
+
+### 7.1 问题：通过 `ctx.agents.create()` 创建的 agent 没有工具
+
+**现象**：定时任务触发后，agent 回复"无可用工具"或"只看到一个工具（im_send_file）"，无法执行命令、读写文件。
+
+**根因**：dsh-web-app 的 `cordis.patch.yml` 把所有通用工具（bash/pwsh/fs/fs-search/editor/skill/web 等）全部 `disabled: true`，工具完全靠 **agent preset** 提供。`ctx.agents.create()` 不传 `setup` 时，agent 的 scoped context 上不会注册任何东西——没有工具、没有 prompt section、没有 model selection。
+
+### 7.2 完整修复方案（四件套，缺一不可）
+
+#### ① `inject` 声明依赖
+
+```typescript
+export const inject = ['agents', 'sessions', 'typert', 'settings', 'agentPresets', 'agentDefaultModel']
+```
+
+不声明 `agentPresets` 和 `agentDefaultModel`，`ctx.get()` 可能在插件启动时返回 undefined。
+
+#### ② `setup` 回调中挂载 preset
+
+```typescript
+const handle = await this.ctx.agents.create({
+  sessionId,
+  meta: { cwd },
+  agentOptions: { provider, model },
+  setup: async (agentCtx) => {
+    await ctx.agentPresets.mount(agentCtx, 'standard')  // 必须传明确的 preset id
+  },
+})
+```
+
+**关键**：`mount` 必须传明确的 preset id `'standard'`，不传可能挂不到正确的 preset。
+
+#### ③ 安装 model selection
+
+不装 model selection 会导致 `{{model}}` 模板变量无值，prompt assembly 报错。
+
+```typescript
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import type { ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+
+const ref: ModelSelectionRef = {
+  get current() { return { provider, model } },
+  set current(_next) {},
+  assembled: undefined,
+}
+installModelSelection(agentCtx, ref)
+```
+
+#### ④ 传 `agentOptions`
+
+```typescript
+agentOptions: { provider, model }
+```
+
+与 `installModelSelection` 配合使用，在创建时指定模型。
+
+### 7.3 参考实现（dsh-im-gateway 参考项目）
+
+`E:\Project\dsh-desktop\参考项目\dsh-im-gateway\src\core\router.ts`：
+
+```typescript
+async create(channelId, chatId) {
+  const handle = await this.ctx.agents.create({
+    sessionId,
+    meta: { cwd },
+    agentOptions: { provider: this.options.provider, model: this.options.model },
+    setup: this.presetSetup(this.options.agentPreset),
+  })
+  return entry
+}
+
+private presetSetup(presetId: string): AgentSetup {
+  const ctx = this.ctx
+  return async (agentCtx) => {
+    await ctx.agentPresets.mount(agentCtx, presetId)
+  }
+}
+```
+
+### 7.4 当前项目 im-gateway 的修复待办
+
+`extensions/im-gateway/src/gateway/im-gateway.ts` 的 `ensureSessionInner` 方法存在同样问题：
+
+- `inject` 没有声明 `'agentPresets'`
+- `ctx.agents.create()` 没传 `setup` 回调
+- 没有挂载 preset
+- 只做了 `installModelSelection`，但 agent 没有工具
+
+**修复步骤**：
+1. `inject` 加 `'agentPresets'`
+2. `ctx.agents.create()` 加 `setup` 回调，调 `ctx.agentPresets.mount(agentCtx, 'standard')`
+3. 加 `agentOptions`（从 config 读 provider/model）
+
+### 7.5 其他踩坑
+
+#### `createAgent` vs `create`
+
+`ctx.agents` 是 `AgentRegistry`，方法名是 `create`（不是 `createAgent`），且不需要 `ownerCtx` 参数：
+
+```typescript
+// 错误
+await this.ctx.agents.createAgent(this.ctx, { sessionId, ... })
+// 正确
+await this.ctx.agents.create({ sessionId, ... })
+```
+
+#### undefined 字段导致 boundary validation 失败
+
+typert 网关的 `assertJsonValue` 不允许 `undefined` 值（非 JSON-safe）。RPC 返回值中如果包含 `undefined` 字段，会报 `business result failed boundary validation`。修复：用 `cleanUndefined` 递归清理返回值。
+
+#### `setSource` 参数是 getter 函数不是值
+
+`installSettingsSection` 传给 `setSource` 的是 getter 函数 `() => scope.get()`，不是值。直接 `currentConfig = src` 会把函数赋给 `currentConfig`，导致后续 `currentConfig.tasks` 为 undefined。
+
+#### 消息 source 的选择
+
+- `{ kind: 'user' }`：Web 端渲染为用户气泡，会话标题自动从消息内容生成
+- `{ kind: 'plugin', plugin: 'xxx' }`：Web 端渲染为 context，会话标题回退到 cwd 目录名
+
+定时任务和 IM 网关都建议用 `{ kind: 'user' }`。
+
+#### 配置持久化
+
+`ctx.settings.update(NS, { tasks })` 写回配置文件，重启后不丢失。但 `onChange` 回调会被触发，需要正确处理 `setSource` + `onChange` 的时序。
