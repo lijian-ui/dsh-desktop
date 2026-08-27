@@ -200,7 +200,7 @@ export class DshManager {
       const child = spawn(command, dshArgs, {
         // NODE_PATH 兜底：插件 junction 的物理目标在桌面壳 node_modules，依赖解析
         // 已能自动向上命中；再加 NODE_PATH 覆盖 dsh 可能改变解析环境的场景（保险）。
-        env: addNodePath(buildDshEnv(this.config), this.config),
+        env: prepareDshEnv(this.config),
         stdio: ['ignore', 'pipe', 'pipe'],
         shell,
       });
@@ -386,6 +386,175 @@ function addNodePath(env: NodeJS.ProcessEnv, config: DshConfig): NodeJS.ProcessE
   const bundled = resolveBundledNodeModules(config);
   if (!base.includes(bundled)) base.push(bundled);
   env.NODE_PATH = base.join(path.delimiter);
+  return env;
+}
+
+/**
+ * 把桌面壳 node_modules/.bin 前缀进 PATH，让 dsh 子进程（及插件市场 spawn 的
+ * `dsh plugin` → pnpm）能解析到桌面壳自带的 pnpm；无需用户机器预装 pnpm。
+ *
+ * 跨平台策略：
+ *   - 开发期：项目根 node_modules/.bin 已含 pnpm 入口（npm/pnpm install 生成），直接加进 PATH
+ *   - 打包期：electron-builder 过滤了 .bin 目录，入口文件缺失 → 在临时目录创建 pnpm shim
+ *     - Windows：pnpm.cmd（批处理），用绝对路径 node.exe 调用 pnpm.cjs
+ *     - macOS/Linux：pnpm（shell 脚本，shebang 指向内置 node），chmod 0o755
+ *   - 内置 node.exe 路径：Windows = resources/node-runtime/node.exe，其他平台 = resources/node-runtime/node
+ */
+function addBinPath(env: NodeJS.ProcessEnv, config: DshConfig): NodeJS.ProcessEnv {
+  const nm = resolveBundledNodeModules(config)
+  const paths = new Set((env.PATH ?? process.env.PATH ?? '').split(path.delimiter).filter(Boolean))
+  const binDir = path.join(nm, '.bin')
+
+  if (fs.existsSync(binDir)) {
+    if (!paths.has(binDir)) paths.add(binDir)
+  } else {
+    const pnpmBin = path.join(nm, 'pnpm', 'bin')
+    const isWin = process.platform === 'win32'
+    const pnpmEntry = path.join(pnpmBin, isWin ? 'pnpm.cmd' : 'pnpm')
+    if (fs.existsSync(pnpmEntry)) {
+      // 内置 node 路径：Windows = node-runtime/node.exe，其他平台 = node-runtime/bin/node
+      // （fetch-node.cjs 精简时保留 bin/ 目录结构，注意不能漏 bin/）
+      const nodePath = app.isPackaged
+        ? path.join(process.resourcesPath, 'node-runtime', ...(isWin ? ['node.exe'] : ['bin', 'node']))
+        : resolveSystemNode(config)
+      // 临时目录 %TEMP%/dsh-bin/（跨平台可写）
+      const shimDir = path.join(os.tmpdir(), 'dsh-bin')
+      try {
+        fs.mkdirSync(shimDir, { recursive: true })
+        const shimName = isWin ? 'pnpm.cmd' : 'pnpm'
+        const shimPath = path.join(shimDir, shimName)
+        if (!fs.existsSync(shimPath)) {
+          // 用绝对路径：shim 经 PATH 调用时 cwd 是用户当前目录，相对路径会失效
+          const script = pnpmEntry
+          if (isWin) {
+            const nodeArg = nodePath ? `"${nodePath}"` : 'node'
+            fs.writeFileSync(shimPath, `@${nodeArg} "${script}" %*\r\n`, 'utf8')
+          } else {
+            // macOS/Linux：避免 shebang 空格问题（内核按空白切分、引号不可靠），
+            // 用 /bin/sh 读取脚本后 exec 真实 node，既保住空格路径又保留 pid 直指 node。
+            const scriptBody = nodePath
+              ? `#!/bin/sh\nexec "${nodePath}" "${script}" "$@"\n`
+              : '#!/usr/bin/env node\n'  // 开发期无内置 node 时的兜底
+            fs.writeFileSync(shimPath, scriptBody, 'utf8')
+            fs.chmodSync(shimPath, 0o755)
+          }
+        }
+        if (!paths.has(shimDir)) paths.add(shimDir)
+      } catch { /* 忽略 */ }
+    }
+    if (fs.existsSync(pnpmBin) && !paths.has(pnpmBin)) paths.add(pnpmBin)
+  }
+  env.PATH = Array.from(paths).join(path.delimiter)
+  return env
+}
+
+/**
+ * 把内置 node-runtime 的 bin 目录前缀进 PATH。node.exe 所在目录与
+ * node_modules/.bin 同级调用链的关键：pnpm 的 .cmd shim 内嵌 `node` 命令，
+ * 靠 PATH 解析——不注入则打包后的用户机器（可能没装系统 node）在
+ * `dsh plugin` → pnpm 一步就失败。前缀内置 node 保证全链路不依赖外部。
+ */
+function addNodeRuntimePath(env: NodeJS.ProcessEnv, config: DshConfig): NodeJS.ProcessEnv {
+  const nodePath = resolveSystemNode(config);
+  if (!nodePath) return env;
+  const nodeDir = path.dirname(nodePath);
+  const base = (env.PATH ?? process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+  if (!base.includes(nodeDir)) base.unshift(nodeDir);
+  env.PATH = base.join(path.delimiter);
+  return env;
+}
+
+/**
+ * ⚠️ 若环境变量存在，跳过的浏览器探测：保留用户/系统已设置的显式值。
+ */
+const UNIVER_RENDER_BROWSER_ENV = 'UNIVER_RENDER_BROWSER';
+
+/**
+ * 探测本机 Chrome/Chromium 可执行文件绝对路径。
+ *
+ * 背景：第三方插件（如 dsh-univer-office）用 `puppeteer-core`，它**不**内置/下载
+ * 浏览器，只探测固定标准路径 + `UNIVER_RENDER_BROWSER` 环境变量兜底。很多用户
+ * 的 Chrome 装在非标准位置（如 per-user `AppData\Local\Google\Chrome\Bin\`，
+ * 或 Edge 的 `EdgeCore\`），会被漏掉。这里在 spawn dsh 前主动探测并注入，
+ * 让这类渲染类插件开箱即用——不只对 univer，对所有按 `UNIVER_RENDER_BROWSER`
+ * 约定找浏览器的插件都生效。
+ *
+ * @returns 浏览器可执行文件路径；未找到返回 null
+ */
+function resolveBundledBrowser(): string | null {
+  const candidates: string[] = [];
+  const isWin = process.platform === 'win32';
+  const local = process.env.LOCALAPPDATA;
+
+  if (isWin) {
+    // 标准 per-user + Program Files（含非标准 `Bin\` 变体，因 2024 年后 Chrome
+    // 更新可能落到 `AppData\Local\Google\Chrome\Bin\`）
+    candidates.push(
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    );
+    if (local) {
+      candidates.push(
+        path.join(local, 'Google\\Chrome\\Application\\chrome.exe'),
+        path.join(local, 'Google\\Chrome\\Bin\\chrome.exe'),
+        path.join(local, 'Microsoft\\Edge\\Application\\msedge.exe'),
+        path.join(local, 'Microsoft\\Edge\\EdgeCore\\msedge.exe'),
+      );
+    }
+  } else if (process.platform === 'darwin') {
+    candidates.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    );
+    candidates.push(
+      path.join(os.homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    );
+  } else {
+    candidates.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+    );
+  }
+
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) return c;
+    } catch {
+      /* 忽略单个候选的异常，继续探测 */
+    }
+  }
+  return null;
+}
+
+/** dsh 子进程启动环境：基础 env + NODE_PATH 兜底 + node-runtime 与内置 bin/pnpm 前缀进 PATH。 */
+function prepareDshEnv(config: DshConfig): NodeJS.ProcessEnv {
+  const env = buildDshEnv(config);
+  addNodePath(env, config);
+  addNodeRuntimePath(env, config);
+  addBinPath(env, config);
+  injectBundledBrowser(env);
+  return env;
+}
+
+/**
+ * 探测到本机浏览器且 `UNIVER_RENDER_BROWSER` 未显式设置时，注入子进程环境变量。
+ * 用户/系统已显式设置的值优先，不覆盖。
+ */
+function injectBundledBrowser(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (env[UNIVER_RENDER_BROWSER_ENV] || process.env[UNIVER_RENDER_BROWSER_ENV]) {
+    return env;
+  }
+  const browser = resolveBundledBrowser();
+  if (browser) {
+    log.info(`探测到本机浏览器，注入 UNIVER_RENDER_BROWSER: ${browser}`);
+    env[UNIVER_RENDER_BROWSER_ENV] = browser;
+  } else {
+    log.warn('未探测到 Chrome/Chromium，渲染类插件（如幻灯片/表格）的浏览器能力将不可用');
+  }
   return env;
 }
 
