@@ -48,8 +48,13 @@ export const SCHEDULE_VIEW_BUNDLE = '@lijian-ui/dsh-schedule-view';
  *  依赖官方 `dsh plugin` CLI，安装走 profile 目录 pnpm，与预置 junction 插件共存。 */
 export const PLUGIN_HUB_BUNDLE = 'dsh-plugin';
 
+/** 模型视觉能力开关插件（settings 页：按模型切换「支持图片」）。
+ *  读取/写回官方 `llm-pi-ai` 命名空间的 `input` 模态，无需手改 settings.yaml。
+ *  本地开发以 file: dependencies 链接到 extensions/dsh-vision-toggle。 */
+export const VISION_TOGGLE_BUNDLE = '@lijian-ui/dsh-vision-toggle';
+
 /** 全部自研插件（逐个建立 profile junction + 层栈声明） */
-export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE, SCHEDULE_VIEW_BUNDLE, PLUGIN_HUB_BUNDLE];
+export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE, SCHEDULE_VIEW_BUNDLE, PLUGIN_HUB_BUNDLE, VISION_TOGGLE_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];

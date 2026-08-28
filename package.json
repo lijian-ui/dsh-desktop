@@ -9,13 +9,13 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "watch:plugins": "npm-run-all --parallel watch:dsh-term watch:file-manager watch:dsh-schedule-view watch:dsh-im-gateway watch:dsh-session-cleaner watch:dsh-skill-manage",
+    "watch:plugins": "npm-run-all --parallel watch:dsh-term watch:dsh-schedule-view watch:dsh-im-gateway watch:dsh-session-cleaner watch:dsh-skill-manage watch:dsh-vision-toggle",
     "watch:dsh-term": "cd extensions/dsh-term && tsdown --watch",
-    "watch:file-manager": "cd extensions/file-manager && tsdown --watch",
     "watch:dsh-schedule-view": "cd extensions/dsh-schedule-view && tsdown --watch",
     "watch:dsh-im-gateway": "cd extensions/im-gateway && tsdown --watch",
     "watch:dsh-session-cleaner": "cd extensions/session-cleaner && tsdown --watch",
     "watch:dsh-skill-manage": "cd extensions/dsh-skill-manage && tsdown --watch",
+    "watch:dsh-vision-toggle": "cd extensions/dsh-vision-toggle && tsdown --watch",
     "start": "electron .",
     "dev": "npm run build && npm-run-all -p watch:plugins start",
     "lint": "tsc --noEmit",
@@ -140,6 +140,7 @@
     "@lijian-ui/dsh-session-cleaner": "latest",
     "@lijian-ui/dsh-skill-manage": "^0.1.4",
     "@lijian-ui/dsh-term": "latest",
+    "@lijian-ui/dsh-vision-toggle": "latest",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.0",
     "@types/react": ">=16.8",
@@ -160,7 +161,8 @@
     "rolldown": "^1.0.0-beta.9",
     "tree-kill": "^1.2.2",
     "ws": "^8.18.0",
-    "zod": "^3.25.28 || ^4"
+    "zod": "^3.25.28 || ^4",
+    "@deepseek-ai/dsh-llm-pi-ai": "*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
