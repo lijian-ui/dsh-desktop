@@ -60,6 +60,14 @@ extraResources:
     to: node-runtime
     filter:
       - "**/*"
+  # 内置 OfficeCLI 二进制（v0.2.3）：
+  # 把 vendor/officecli/<os>-<arch>/ 的单文件二进制拷进安装包 resources/officecli/，
+  # office-preview 路由优先使用内置二进制，用户无需预装 officecli。
+  # 产物由 scripts/fetch-officecli.cjs 在打包前生成（officecli/ 下载 → vendor/ 拷贝）。
+  - from: vendor/officecli/${os}-${arch}
+    to: officecli
+    filter:
+      - "**/*"
 
 win:
   target:

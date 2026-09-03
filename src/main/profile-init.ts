@@ -53,7 +53,9 @@ export const PLUGIN_HUB_BUNDLE = 'dsh-plugin';
  *  本地开发以 file: dependencies 链接到 extensions/dsh-vision-toggle。 */
 export const VISION_TOGGLE_BUNDLE = '@lijian-ui/dsh-vision-toggle';
 
-/** 全部自研插件（逐个建立 profile junction + 层栈声明） */
+/** 全部自研插件（逐个建立 profile junction + 层栈声明）。
+ *  注意：@lijian-ui/dsh-office 已停用（仅作代码参考），不再注册进 bundle，避免
+ *  未安装导致 ensurePluginLink 启动抛错。 */
 export const PLUGIN_BUNDLES: string[] = [IM_GATEWAY_BUNDLE, SESSION_CLEANER_BUNDLE, FILE_MANAGER_BUNDLE, DSH_TERM_BUNDLE, SKILL_MANAGE_BUNDLE, SCHEDULE_VIEW_BUNDLE, PLUGIN_HUB_BUNDLE, VISION_TOGGLE_BUNDLE];
 
 /** profile 层栈里的官方内置 bundle（dsh 从自身解析，不在 profile node_modules 里） */

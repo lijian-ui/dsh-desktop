@@ -306,8 +306,9 @@ export class DshManager {
       setTimeout(async () => {
         if (this.stopping || this.epoch !== myEpoch) return; // 已主动停止或纪元过期，放弃本次重启
         try {
-          // 重启时使用 --port 0 让系统重新分配端口（避免复用可能仍被占用的旧端口）
-          await this.spawnOnce(0);
+          // 崩溃后复用固定端口重启（保持 origin 稳定，localStorage 才能持久化）；
+          // 若端口此刻仍被占用，会被 spawnOnce 的启动失败路径捕获并按 start() 重试。
+          await this.spawnOnce(this.config.port);
           if (this.epoch !== myEpoch) return; // 重启期间又发生了 start/stop，放弃
           this.running = true;
           this.callbacks.onReady(this.port);
@@ -530,13 +531,89 @@ function resolveBundledBrowser(): string | null {
   return null;
 }
 
-/** dsh 子进程启动环境：基础 env + NODE_PATH 兜底 + node-runtime 与内置 bin/pnpm 前缀进 PATH。 */
+/**
+ * 把内置 officecli 二进制目录前缀进 PATH，让 dsh 子进程（及其拉起 LLM 的
+ * shell）可直接 `officecli view <file> html` 命令，无需用户预装。
+ *
+ * 二进制所在目录按运行形态区分，保证 dev 与打包后行为一致：
+ *   - 打包版：resources/officecli/（仅 app.isPackaged 为真时存在）
+ *   - 开发版：项目根 vendor/officecli/<os>-<arch>/（fetch-officecli.cjs 产物，
+ *             与打包 extraResources 同源）
+ *
+ * 权限兜底：macOS/Linux 上 electron-builder 的 extraResources 拷贝不可靠保留
+ * 0o755 执行位，此处运行时检出缺失执行位即补足，避免「PATH 已在但 spawn
+ * 拿到 permission denied」——那是安装后 LLM 调不到 officecli 的典型场景。
+ */
+function addOfficecliPath(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  // 平台目标目录映射（与 electron-builder ${os}-${arch} / fetch-officecli TARGETS 对齐）
+  const isWin = process.platform === 'win32';
+  let officecliDir: string;
+
+  if (app.isPackaged) {
+    officecliDir = path.join(process.resourcesPath, 'officecli');
+  } else {
+    const target = isWin
+      ? process.arch === 'x64'
+        ? 'win-x64'
+        : null
+      : process.platform === 'darwin'
+        ? process.arch === 'arm64'
+          ? 'mac-arm64'
+          : process.arch === 'x64'
+            ? 'mac-x64'
+            : null
+        : null;
+    if (target === null) {
+      log.warn(`当前平台无内置 OfficeCLI 产物，跳过 PATH 注入: ${process.platform}/${process.arch}`);
+      return env;
+    }
+    officecliDir = path.join(process.cwd(), 'vendor', 'officecli', target);
+  }
+
+  const officecliFile = path.join(officecliDir, isWin ? 'officecli.exe' : 'officecli');
+
+  if (!fs.existsSync(officecliFile)) {
+    log.warn(`未找到内置 OfficeCLI 二进制，跳过 PATH 注入: ${officecliFile}`);
+    return env;
+  }
+
+  // 运行时权限兜底：非 Windows 平台若缺执行位，立即补足 0o755。
+  try {
+    if (!isWin) {
+      const mode = fs.statSync(officecliFile).mode;
+      if ((mode & 0o111) === 0) {
+        fs.chmodSync(officecliFile, 0o755);
+        log.info(`修复内置 OfficeCLI 执行权限: ${officecliFile}`);
+      }
+    }
+  } catch (err) {
+    log.warn(`设置内置 OfficeCLI 执行权限失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const base = (env.PATH ?? process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+  if (!base.includes(officecliDir)) base.unshift(officecliDir);
+  env.PATH = base.join(path.delimiter);
+  log.info(`已注入内置 OfficeCLI 到 PATH: ${officecliDir}`);
+
+  // 常驻进程落盘策略：officecli 用命名管道维持文件常驻（create 自动启动），
+  // 修改在内存 DOM。默认 auto 是空闲去抖 flush（2-10s），LLM 每步独立
+  // `set` 退出后常驻可能未到 flush 时机，改动会在内存中丢失（"修改不落盘"）。
+  // 强制 each：每次 mutation 命令返回前写盘，保证模型单步修改立即可见。
+  if (env.OFFICECLI_RESIDENT_FLUSH === undefined) {
+    env.OFFICECLI_RESIDENT_FLUSH = 'each';
+    log.info(`设定 OfficeCLI 常驻落盘策略 OFFICECLI_RESIDENT_FLUSH=${env.OFFICECLI_RESIDENT_FLUSH}`);
+  }
+  return env;
+}
+
+/** dsh 子进程启动环境：基础 env + NODE_PATH 兜底 + node-runtime、内置 bin/pnpm、officecli 前缀进 PATH。 */
 function prepareDshEnv(config: DshConfig): NodeJS.ProcessEnv {
   const env = buildDshEnv(config);
   addNodePath(env, config);
   addNodeRuntimePath(env, config);
   addBinPath(env, config);
   injectBundledBrowser(env);
+  addOfficecliPath(env);
   return env;
 }
 

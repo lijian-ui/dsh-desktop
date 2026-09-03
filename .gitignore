@@ -11,6 +11,8 @@ dist-electron/
 # vendor/ = 精简后的 Node 运行时（fetch-node.cjs 构建时生成）
 node/
 vendor/
+# OfficeCLI 二进制下载缓存（fetch-officecli.cjs 下载后转存 vendor/officecli/）
+officecli/
 
 # 日志
 *.log
@@ -27,6 +29,7 @@ scripts/publish-github.mjs
 .idea/
 .vscode/
 .codeartsdoer
+.trae/
 
 # 第三方参考源码（pi-desk-top 等），不随仓库发布
 参考项目/
@@ -42,3 +45,5 @@ extensions/
 
 # 临时调试/验证脚本（一次性使用，不纳入版本控制）
 *.ps1
+scripts/cdp-*.mjs
+scripts/gen-nofont-pdf.mjs

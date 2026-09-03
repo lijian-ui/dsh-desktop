@@ -21,7 +21,7 @@ import { app } from 'electron';
 export interface DshConfig {
   /** HTTP 监听地址，默认 127.0.0.1（仅本机，不暴露到网络） */
   host: string;
-  /** 监听端口，传 0 让操作系统分配一个空闲端口，避免 3080 默认端口冲突 */
+  /** 监听端口；默认 3080（固定，保证 localStorage 跨重启持久化）。被占用时自动顺延 */
   port: number;
   /** DeepSeek API Key（可选，缺失时 dsh 会在其 UI 内提示填写） */
   apiKey?: string;
@@ -48,6 +48,13 @@ export interface DshConfig {
 
 /** 本地配置文件名称（位于项目根或用户数据目录） */
 const CONFIG_FILE_NAME = 'config.json';
+
+/**
+ * 固定默认监听端口。端口稳定后，浏览器 origin（含端口）跨重启保持稳定，
+ * file-manager 等客户端的 localStorage 才能可靠持久化（面板宽度、折叠状态等）。
+ * 被占用时 dsh-process 会自动顺延相邻端口并重试。
+ */
+const DEFAULT_PORT = 3080;
 
 /**
  * 读取一份可选的本地配置文件。
@@ -86,7 +93,7 @@ export function loadConfig(): DshConfig {
 
   return {
     host: process.env.DSH_HOST || fileConfig.host || '127.0.0.1',
-    port: fileConfig.port ?? (process.env.DSH_PORT ? Number(process.env.DSH_PORT) : 0),
+    port: fileConfig.port ?? (process.env.DSH_PORT ? Number(process.env.DSH_PORT) : DEFAULT_PORT),
     apiKey,
     extraArgs: fileConfig.extraArgs ?? [],
     nodePath: fileConfig.nodePath,

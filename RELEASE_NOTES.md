@@ -1,46 +1,63 @@
-# DeepSeek Harness 桌面端 v0.4.0
+# DeepSeek Harness 桌面端 v0.5.0
 
-> 发布日期：2026-08-26
+> 发布日期：2026-09-03
 
 ## 核心亮点
 
-**🔧 内核对齐 DSH 官方 0.1.1-rc.2，构建链路全面加固**
+**📄 办公文件高保真预览（OfficeCLI 集成）**
 
-v0.4.0 是一个维护性版本：运行时内核与官方 deepseek-harness 最新发布版（0.1.1-rc.2）完整对齐，同时修复了 Windows 环境下的构建脚本兼容性问题，并补全了一批此前靠「侥幸」生效的幽灵依赖声明，打包产物的完整性从此有制度保证。
+v0.5.0 内置 OfficeCLI 二进制，Word / PPT / Excel 预览从「渲染失真」升级为**原样高保真**：单元格填充色、日期/货币格式、合并单元格等细节完整还原，无需用户预装任何 Office 组件即可直接预览。
 
 ## 新增与改进
 
-### 运行时与依赖
+### 办公文件预览
 
-- **DSH 内核对齐 0.1.1-rc.2**：全部 `@deepseek-ai/*` 依赖统一至官方最新 rc 版本
-- **跟进官方包拆分**：预置 `dsh-file-reference` / `dsh-session-reference` / `dsh-tool-todo` / `dsh-client-ui-layout` 等新版拆分包
-- **消除幽灵依赖**：源码直接引用的 `dsh-base`、`dsh-web-app` 此前未在 dependencies 中声明（靠 npm 提升机制侥幸生效），现已显式声明，electron-builder 打包不再有缺包风险
-- **补充构建依赖**：`lightningcss` 进入根 devDependencies（扩展插件 tsdown 配置所需）
+- **内置 OfficeCLI**：桌面壳在打包时把单文件二进制放入 `resources/officecli/`，运行前自动注入到 dsh 子进程 PATH（开发版走项目根 `vendor/officecli/`，打包版走 `resources/officecli/`），用户零安装即用
 
-### 开发体验
+- **Excel / Word / PPT 高保真预览**（file-manager 0.2.4）：经 `officecli view <file> html` 服务端渲染，在 iframe 中原样展示填充、日期、货币格式与合并单元格
 
-- **插件热更新完善**：`npm run dev` 自动并行监听全部 6 个扩展插件，改代码即自动构建
-- **Windows 脚本兼容修复**：watch 脚本改为 `cd <目录> && tsdown --watch` 写法——旧写法使用 POSIX 分号分隔符并以 node 直接执行 sh 包装脚本，在 cmd.exe 下必然失败（「系统找不到指定的路径」）
-- **安装脚本治理**：通过 `npm approve-scripts` 显式批准 electron / node-pty / koffi 等原生模块的安装脚本，符合新版 npm 安全策略
+- **Excel 区域选区引用**：只读 Excel 预览中单击单元格或拖选一片范围，即可「引用到对话」生成 `相对路径!Sheet名!Range` 引用
+
+  <br />
+
+### 自研插件内置
+
+- **dsh-vision-toggle**：模型视觉能力开关插件内置，按模型单独切换视觉能力（镜像 npm `0.1.0`）
+
+- **dsh-term**：PTY 终端插件内置（支持 npm 依赖加载方式）
+
+- **pnpmp/浏览器探测**：打包内置 pnpm shim 与本机浏览器探测，`dsh web` 子进程自动识别可用的渲染浏览器
+
+### 构建与依赖
+
+- 全部自研插件统一以 **npm 依赖**形式接入（`latest` 自动跟随发布），发版后无需手动同步插件代码
+
+- 固化 `--legacy-peer-deps`，解决 npm 静默崩溃与 peer 冲突
+
+- 新增 `scripts/fetch-officecli.cjs`，打包前按 `win-x64 / mac-x64 / mac-arm64` 下载并分置 OfficeCLI 二进制（PS：macOS 分架构打包，非 universal）
 
 ## 支持平台
 
-| 平台 | 架构 | 安装包 |
-|---|---|---|
-| Windows | x64 | NSIS 安装程序（.exe） |
-| macOS | x64 / arm64 | DMG |
+| 平台      | 架构          | 安装包             |
+| ------- | ----------- | --------------- |
+| Windows | x64         | NSIS 安装程序（.exe） |
+| macOS   | x64 / arm64 | DMG             |
 
 ## 环境要求
 
-- **无需预装 Node.js**（内置精简版运行时）
+- **无需预装 Node.js**（内置精简版运行时），也**无需预装 Office / OfficeCLI**
+
 - Windows 10+ / macOS 12+
+
 - 从源码构建的开发者请注意：Node.js 堆内存建议 ≥ 8GB（`NODE_OPTIONS=--max-old-space-size=8192`），且 `npm install` 需携带 `--legacy-peer-deps`
 
 ## 已知限制
 
+- `.xls` / `.ods` 等旧格式暂以 SheetJS 只读表格展示（不支持区域选区引用）；`.xlsx` 走 OfficeCLI 高保真预览
+
+- macOS 打包为 `x64`/`arm64` 分开产物，未提供 `universal` 通用包；若改用 `--universal` 打包需补充对应的 `mac-universal` OfficeCLI 目录
+
 - macOS 安装包未做 Apple 开发者签名，首次打开需右键「打开」或按 README 指引放行 Gatekeeper
-- IM 网关的扫码登录依赖网络访问 QQ / 微信官方服务
-- 官方 SDK（`@deepseek-ai/dsh-sdk-client`）尚处 pre-release 阶段，本版本暂不基于它构建，桌面壳继续沿用 spawn web 子进程方案
 
 ## 反馈
 
