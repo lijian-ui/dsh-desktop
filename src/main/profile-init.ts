@@ -216,3 +216,29 @@ export function ensureImGatewayProfile(config: DshConfig): { profileDir: string;
 
   return { profileDir, pluginSources };
 }
+
+/**
+ * 首次启动内置 office-cli skill 落盘到全局 skills 目录 `~/.dsh/skills/office-cli/`。
+ *
+ * 与插件 profile 同构的「下载即用」引导：dsh 的全局 skills 目录为 `~/.dsh/skills/`，
+ * skill 子系统会自动发现其中的 SKILL.md，因此用户无需手动拷贝即可获得官方 officecli
+ * skill。打包期源 = resources/office-cli-skill/（extraResources 产物），开发期源 =
+ * 项目根 skills/office-cli/。
+ *
+ * 幂等/策略：目标目录已存在则整体跳过（不覆盖，保护用户对自己的修改），只做首次
+ * 播种；随包分发的 SKILL.md 为启用态，首次安装即启用。失败以 throw 表达（不抛出错误
+ * 则由调用方决定是否阻断）。
+ *
+ * @returns 播种的目标目录；已存在（跳过）时返回 null
+ */
+export function seedBundledOfficeCliSkill(): string | null {
+  const source = app.isPackaged
+    ? path.join(process.resourcesPath, 'office-cli-skill')
+    : path.join(process.cwd(), 'skills', 'office-cli');
+  const skillDir = path.join(resolveDshHome(), 'skills', 'office-cli');
+
+  if (fs.existsSync(skillDir)) return null; // 已存在：跳过，保留用户改动
+
+  fs.cpSync(source, skillDir, { recursive: true });
+  return skillDir;
+}

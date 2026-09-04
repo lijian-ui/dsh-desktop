@@ -68,6 +68,13 @@ extraResources:
     to: officecli
     filter:
       - "**/*"
+  # 内置 office-cli skill（v0.5.0）：
+  # 把 skills/office-cli/ 拷进安装包 resources/office-cli-skill/，首次启动由主进程
+  # seed 到全局 ~/.dsh/skills/office-cli/（见 profile-init.ts seedBundledOfficeCliSkill）。
+  - from: skills/office-cli
+    to: office-cli-skill
+    filter:
+      - "**/*"
 
 win:
   target:

@@ -28,7 +28,7 @@ import { app } from 'electron';
 import kill from 'tree-kill';
 import { createLogger } from './log';
 import { DshConfig, buildDshEnv } from './config';
-import { ensureImGatewayProfile, resolveBundledNodeModules } from './profile-init';
+import { ensureImGatewayProfile, resolveBundledNodeModules, seedBundledOfficeCliSkill } from './profile-init';
 
 const log = createLogger('dsh');
 
@@ -108,6 +108,15 @@ export class DshManager {
       log.info(`插件 profile 就绪: ${r.profileDir}（${r.pluginSources.length} 个 bundle）`);
     } catch (err) {
       log.warn(`插件 profile 部署失败（不影响 dsh 启动）: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 首次启动把内置 office-cli skill 播种到全局 ~/.dsh/skills/office-cli/。
+    // 目标已存在则跳过（保留用户改动），失败仅告警，不阻断 dsh 本体。
+    try {
+      const seeded = seedBundledOfficeCliSkill();
+      if (seeded) log.info(`内置 office-cli skill 已播种到全局 skills 目录: ${seeded}`);
+    } catch (err) {
+      log.warn(`内置 office-cli skill 播种失败（不影响 dsh 启动）: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     let tryPort = this.config.port; // 0 表示由系统分配空闲端口
